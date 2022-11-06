@@ -30,22 +30,55 @@ async fn handle_generation(
     http: &Http,
 ) -> anyhow::Result<()> {
     let options = &command.data.options;
-    let CommandDataOptionValue::String(prompt) = options
-        .get(0)
-        .and_then(|v| v.resolved.as_ref())
-        .context("expected prompt")? else { anyhow::bail!("invalid prompt type"); };
-    let seed = options
-        .get(1)
-        .and_then(|v| v.resolved.as_ref())
-        .and_then(|v| match v {
-            CommandDataOptionValue::Integer(seed) => Some(*seed),
-            _ => None,
-        });
+
+    let get_value = |name: &str| {
+        options
+            .iter()
+            .find(|v| v.name == name)
+            .and_then(|v| v.resolved.as_ref())
+    };
+    let value_to_int = |v: Option<&CommandDataOptionValue>| match v? {
+        CommandDataOptionValue::Integer(v) => Some(*v),
+        _ => None,
+    };
+    let value_to_number = |v: Option<&CommandDataOptionValue>| match v? {
+        CommandDataOptionValue::Number(v) => Some(*v),
+        _ => None,
+    };
+    let value_to_string = |v: Option<&CommandDataOptionValue>| match v? {
+        CommandDataOptionValue::String(v) => Some(v.clone()),
+        _ => None,
+    };
+    let value_to_bool = |v: Option<&CommandDataOptionValue>| match v? {
+        CommandDataOptionValue::Boolean(v) => Some(*v),
+        _ => None,
+    };
+
+    let prompt = value_to_string(get_value("prompt")).context("expected prompt")?;
+    let seed = value_to_int(get_value("seed"));
+    let count = value_to_int(get_value("count")).map(|v| v as u32);
+    let width = value_to_int(get_value("width")).map(|v| v as u32 / 64 * 64);
+    let height = value_to_int(get_value("height")).map(|v| v as u32 / 64 * 64);
+    let guidance = value_to_number(get_value("guidance")).map(|v| v as f32);
+    let steps = value_to_int(get_value("steps")).map(|v| v as u32);
+    let tiling = value_to_bool(get_value("tiling"));
+    let restore_faces = value_to_bool(get_value("restore_faces"));
+    let sampler =
+        value_to_string(get_value("sampler")).and_then(|v| sd::Sampler::try_from(v.as_str()).ok());
 
     let result = client
         .generate_image_from_text(&sd::GenerationRequest {
             prompt: prompt.as_str(),
             seed,
+            batch_size: Some(1),
+            batch_count: count,
+            width,
+            height,
+            cfg_scale: guidance,
+            steps,
+            tiling,
+            restore_faces,
+            sampler,
             ..Default::default()
         })
         .block()
@@ -75,8 +108,8 @@ async fn handle_generation(
                     result
                         .info
                         .seeds
-                        .into_iter()
-                        .map(|seed| format!("`/paint prompt:{prompt} seed:{seed}`"))
+                        .iter()
+                        .map(|seed| format!("`/paint prompt:{prompt} seed:{seed} count:{} width:{} height:{} guidance_scale:{} steps:{} tiling:{} restore_faces:{} sampler:{}`", result.info.seeds.len(), result.info.width, result.info.height, result.info.cfg_scale, result.info.steps, result.info.tiling, result.info.restore_faces, result.info.sampler.to_string()))
                         .collect::<Vec<_>>()
                         .join("\n"),
                 )
@@ -137,6 +170,78 @@ impl EventHandler for Handler {
                         .description("The seed to use")
                         .kind(CommandOptionType::Integer)
                         .required(false)
+                })
+                .create_option(|option| {
+                    option
+                        .name("count")
+                        .description("The number of images to generate")
+                        .kind(CommandOptionType::Integer)
+                        .min_int_value(1)
+                        .max_int_value(4)
+                        .required(false)
+                })
+                .create_option(|option| {
+                    option
+                        .name("width")
+                        .description("The width of the image")
+                        .kind(CommandOptionType::Integer)
+                        .min_int_value(64)
+                        .max_int_value(1024)
+                        .required(false)
+                })
+                .create_option(|option| {
+                    option
+                        .name("height")
+                        .description("The height of the image")
+                        .kind(CommandOptionType::Integer)
+                        .min_int_value(64)
+                        .max_int_value(1024)
+                        .required(false)
+                })
+                .create_option(|option| {
+                    option
+                        .name("guidance_scale")
+                        .description("The scale of the guidance to apply")
+                        .kind(CommandOptionType::Number)
+                        .min_number_value(2.5)
+                        .max_number_value(20.0)
+                        .required(false)
+                })
+                .create_option(|option| {
+                    option
+                        .name("steps")
+                        .description("The number of denoising steps to apply")
+                        .kind(CommandOptionType::Integer)
+                        .min_int_value(5)
+                        .max_int_value(100)
+                        .required(false)
+                })
+                .create_option(|option| {
+                    option
+                        .name("tiling")
+                        .description("Whether or not the image should be tiled at the edges")
+                        .kind(CommandOptionType::Boolean)
+                        .required(false)
+                })
+                .create_option(|option| {
+                    option
+                        .name("restore_faces")
+                        .description("Whether or not the image should have its faces restored")
+                        .kind(CommandOptionType::Boolean)
+                        .required(false)
+                })
+                .create_option(|option| {
+                    let opt = option
+                        .name("sampler")
+                        .description("The sampler to use")
+                        .kind(CommandOptionType::String)
+                        .required(false);
+
+                    for value in sd::Sampler::VALUES {
+                        opt.add_string_choice(value.to_string(), value.to_string());
+                    }
+
+                    opt
                 })
         })
         .await
