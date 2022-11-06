@@ -111,7 +111,7 @@ async fn handle_generation(
                         .iter()
                         .map(|seed| format!("`/paint prompt:{prompt} seed:{seed} count:{} width:{} height:{} guidance_scale:{} steps:{} tiling:{} restore_faces:{} sampler:{}`", result.info.seeds.len(), result.info.width, result.info.height, result.info.cfg_scale, result.info.steps, result.info.tiling, result.info.restore_faces, result.info.sampler.to_string()))
                         .collect::<Vec<_>>()
-                        .join("\n"),
+                        .join("\n\n"),
                 )
             },
         )
