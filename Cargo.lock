@@ -642,9 +642,9 @@ dependencies = [
 
 [[package]]
 name = "ipnet"
-version = "2.5.0"
+version = "2.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "879d54834c8c76457ef4293a689b2a8c59b076067ad77b15efafbb05f92a592b"
+checksum = "f88c5561171189e69df9d98bcf18fd5f9558300f7ea7b801eb8a0fd748bd8745"
 
 [[package]]
 name = "itoa"
@@ -1393,7 +1393,7 @@ dependencies = [
 [[package]]
 name = "stable-diffusion-a1111-webui-client"
 version = "0.1.0"
-source = "git+https://github.com/philpax/stable-diffusion-a1111-webui-client.git#d23eeaf32157a2ac30b9eb50213a5f45bf5baaef"
+source = "git+https://github.com/philpax/stable-diffusion-a1111-webui-client.git#0778caa730fc2af6ca2a5577cd4ea9ad90f70f43"
 dependencies = [
  "base64",
  "image",

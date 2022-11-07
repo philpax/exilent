@@ -21,50 +21,58 @@ use serenity::{
 
 use stable_diffusion_a1111_webui_client as sd;
 
-struct Handler(sd::Client);
+fn get_value<'a>(
+    cmd: &'a ApplicationCommandInteraction,
+    name: &'a str,
+) -> Option<&'a CommandDataOptionValue> {
+    cmd.data
+        .options
+        .iter()
+        .find(|v| v.name == name)
+        .and_then(|v| v.resolved.as_ref())
+}
+fn value_to_int(v: Option<&CommandDataOptionValue>) -> Option<i64> {
+    match v? {
+        CommandDataOptionValue::Integer(v) => Some(*v),
+        _ => None,
+    }
+}
+fn value_to_number(v: Option<&CommandDataOptionValue>) -> Option<f64> {
+    match v? {
+        CommandDataOptionValue::Number(v) => Some(*v),
+        _ => None,
+    }
+}
+fn value_to_string(v: Option<&CommandDataOptionValue>) -> Option<String> {
+    match v? {
+        CommandDataOptionValue::String(v) => Some(v.clone()),
+        _ => None,
+    }
+}
+fn value_to_bool(v: Option<&CommandDataOptionValue>) -> Option<bool> {
+    match v? {
+        CommandDataOptionValue::Boolean(v) => Some(*v),
+        _ => None,
+    }
+}
 
 async fn handle_generation(
     client: &sd::Client,
-    command: &ApplicationCommandInteraction,
+    cmd: &ApplicationCommandInteraction,
     channel: ChannelId,
     http: &Http,
 ) -> anyhow::Result<()> {
-    let options = &command.data.options;
-
-    let get_value = |name: &str| {
-        options
-            .iter()
-            .find(|v| v.name == name)
-            .and_then(|v| v.resolved.as_ref())
-    };
-    let value_to_int = |v: Option<&CommandDataOptionValue>| match v? {
-        CommandDataOptionValue::Integer(v) => Some(*v),
-        _ => None,
-    };
-    let value_to_number = |v: Option<&CommandDataOptionValue>| match v? {
-        CommandDataOptionValue::Number(v) => Some(*v),
-        _ => None,
-    };
-    let value_to_string = |v: Option<&CommandDataOptionValue>| match v? {
-        CommandDataOptionValue::String(v) => Some(v.clone()),
-        _ => None,
-    };
-    let value_to_bool = |v: Option<&CommandDataOptionValue>| match v? {
-        CommandDataOptionValue::Boolean(v) => Some(*v),
-        _ => None,
-    };
-
-    let prompt = value_to_string(get_value("prompt")).context("expected prompt")?;
-    let seed = value_to_int(get_value("seed"));
-    let count = value_to_int(get_value("count")).map(|v| v as u32);
-    let width = value_to_int(get_value("width")).map(|v| v as u32 / 64 * 64);
-    let height = value_to_int(get_value("height")).map(|v| v as u32 / 64 * 64);
-    let guidance = value_to_number(get_value("guidance")).map(|v| v as f32);
-    let steps = value_to_int(get_value("steps")).map(|v| v as u32);
-    let tiling = value_to_bool(get_value("tiling"));
-    let restore_faces = value_to_bool(get_value("restore_faces"));
-    let sampler =
-        value_to_string(get_value("sampler")).and_then(|v| sd::Sampler::try_from(v.as_str()).ok());
+    let prompt = value_to_string(get_value(cmd, "prompt")).context("expected prompt")?;
+    let seed = value_to_int(get_value(cmd, "seed"));
+    let count = value_to_int(get_value(cmd, "count")).map(|v| v as u32);
+    let width = value_to_int(get_value(cmd, "width")).map(|v| v as u32 / 64 * 64);
+    let height = value_to_int(get_value(cmd, "height")).map(|v| v as u32 / 64 * 64);
+    let guidance = value_to_number(get_value(cmd, "guidance")).map(|v| v as f32);
+    let steps = value_to_int(get_value(cmd, "steps")).map(|v| v as u32);
+    let tiling = value_to_bool(get_value(cmd, "tiling"));
+    let restore_faces = value_to_bool(get_value(cmd, "restore_faces"));
+    let sampler = value_to_string(get_value(cmd, "sampler"))
+        .and_then(|v| sd::Sampler::try_from(v.as_str()).ok());
 
     let result = client
         .generate_image_from_text(&sd::GenerationRequest {
@@ -120,33 +128,77 @@ async fn handle_generation(
     Ok(())
 }
 
+async fn paint(ctx: Context, client: &sd::Client, command: ApplicationCommandInteraction) {
+    command
+        .create_interaction_response(&ctx.http, |response| {
+            response
+                .kind(InteractionResponseType::ChannelMessageWithSource)
+                .interaction_response_data(|message| message.content("Generating..."))
+        })
+        .await
+        .unwrap();
+
+    let channel = command.channel_id;
+    if let Err(err) = handle_generation(&client, &command, channel, &ctx.http).await {
+        channel
+            .send_message(&ctx.http, |r| r.content(format!("Error: {err:?}")))
+            .await
+            .ok();
+    }
+}
+
+async fn exilent(ctx: Context, client: &sd::Client, cmd: ApplicationCommandInteraction) {
+    let channel = cmd.channel_id;
+    let mut texts = vec![];
+    match client.embeddings().await {
+        Ok(embeddings) => {
+            const THRESHOLD: usize = 1900;
+            texts.push(String::new());
+
+            for embedding in embeddings {
+                if texts.last().map(|t| t.len()) >= Some(THRESHOLD) {
+                    texts.push(String::new());
+                }
+                if let Some(last) = texts.last_mut() {
+                    if !last.is_empty() {
+                        *last += ", ";
+                    }
+                    *last += "`";
+                    *last += &embedding;
+                    *last += "`";
+                }
+            }
+        }
+        Err(err) => texts.push(format!("{err:?}")),
+    };
+    cmd.create_interaction_response(&ctx.http, |response| {
+        response
+            .kind(InteractionResponseType::ChannelMessageWithSource)
+            .interaction_response_data(|message| {
+                message.title("Embeddings").content(texts.first().unwrap())
+            })
+    })
+    .await
+    .unwrap();
+
+    for remainder in texts.iter().skip(1) {
+        channel
+            .send_message(&ctx.http, |msg| msg.content(remainder))
+            .await
+            .unwrap();
+    }
+}
+
+struct Handler(sd::Client);
 #[async_trait]
 impl EventHandler for Handler {
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
-        let Interaction::ApplicationCommand(command) = interaction else { return };
+        let Interaction::ApplicationCommand(cmd) = interaction else { return };
 
-        if command.data.name != "paint" {
-            return;
-        }
-        let channel = command.channel_id;
-
-        let result = command
-            .create_interaction_response(&ctx.http, |response| {
-                response
-                    .kind(InteractionResponseType::ChannelMessageWithSource)
-                    .interaction_response_data(|message| message.content("Generating..."))
-            })
-            .await;
-        if let Err(why) = result {
-            println!("Cannot respond to slash command (pre-generation): {}", why);
-            return;
-        }
-
-        if let Err(err) = handle_generation(&self.0, &command, channel, &ctx.http).await {
-            channel
-                .send_message(&ctx.http, |r| r.content(format!("Error: {err:?}")))
-                .await
-                .ok();
+        match cmd.data.name.as_str() {
+            "paint" => paint(ctx, &self.0, cmd).await,
+            "exilent" => exilent(ctx, &self.0, cmd).await,
+            _ => {}
         }
     }
 
@@ -242,6 +294,20 @@ impl EventHandler for Handler {
                     }
 
                     opt
+                })
+        })
+        .await
+        .unwrap();
+
+        Command::create_global_application_command(&ctx.http, |command| {
+            command
+                .name("exilent")
+                .description("Meta-commands for Exilent")
+                .create_option(|option| {
+                    option
+                        .name("embeddings")
+                        .description("Lists all of the supported embeddings")
+                        .kind(CommandOptionType::SubCommand)
                 })
         })
         .await
