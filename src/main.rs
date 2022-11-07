@@ -147,29 +147,34 @@ async fn paint(ctx: Context, client: &sd::Client, command: ApplicationCommandInt
     }
 }
 
+fn generate_chunked_strings<'a>(strings: impl Iterator<Item = &'a str>) -> Vec<String> {
+    let mut texts = vec![];
+
+    const THRESHOLD: usize = 1900;
+    texts.push(String::new());
+
+    for string in strings {
+        if texts.last().map(|t| t.len()) >= Some(THRESHOLD) {
+            texts.push(String::new());
+        }
+        if let Some(last) = texts.last_mut() {
+            if !last.is_empty() {
+                *last += ", ";
+            }
+            *last += "`";
+            *last += &string;
+            *last += "`";
+        }
+    }
+
+    texts
+}
+
 async fn exilent(ctx: Context, client: &sd::Client, cmd: ApplicationCommandInteraction) {
     let channel = cmd.channel_id;
-    let mut texts = vec![];
-    match client.embeddings().await {
-        Ok(embeddings) => {
-            const THRESHOLD: usize = 1900;
-            texts.push(String::new());
-
-            for embedding in embeddings {
-                if texts.last().map(|t| t.len()) >= Some(THRESHOLD) {
-                    texts.push(String::new());
-                }
-                if let Some(last) = texts.last_mut() {
-                    if !last.is_empty() {
-                        *last += ", ";
-                    }
-                    *last += "`";
-                    *last += &embedding;
-                    *last += "`";
-                }
-            }
-        }
-        Err(err) => texts.push(format!("{err:?}")),
+    let texts = match client.embeddings().await {
+        Ok(embeddings) => generate_chunked_strings(embeddings.iter().map(|s| s.as_str())),
+        Err(err) => vec![format!("{err:?}")],
     };
     cmd.create_interaction_response(&ctx.http, |response| {
         response
