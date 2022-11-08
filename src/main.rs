@@ -1,9 +1,10 @@
-use std::{env, io::Cursor};
+use std::{env, io::Cursor, time::Duration};
 
 use anyhow::Context as AnyhowContext;
 use dotenv::dotenv;
 use serenity::{
     async_trait,
+    builder::CreateEmbed,
     client::{Context, EventHandler},
     http::Http,
     model::{
@@ -74,24 +75,41 @@ async fn handle_generation(
     let sampler = value_to_string(get_value(cmd, "sampler"))
         .and_then(|v| sd::Sampler::try_from(v.as_str()).ok());
 
-    let result = client
-        .generate_image_from_text(&sd::GenerationRequest {
-            prompt: prompt.as_str(),
-            seed,
-            batch_size: Some(1),
-            batch_count: count,
-            width,
-            height,
-            cfg_scale: guidance,
-            steps,
-            tiling,
-            restore_faces,
-            sampler,
-            ..Default::default()
+    let task = client.generate_image_from_text(&sd::GenerationRequest {
+        prompt: prompt.as_str(),
+        seed,
+        batch_size: Some(1),
+        batch_count: count,
+        width,
+        height,
+        cfg_scale: guidance,
+        steps,
+        tiling,
+        restore_faces,
+        sampler,
+        ..Default::default()
+    });
+
+    loop {
+        let progress = task.progress().await?;
+
+        cmd.edit_original_interaction_response(http, |m| {
+            m.content(format!(
+                "Generating. {:.02}% complete. ({:.02} seconds remaining)",
+                progress.progress_factor * 100.0,
+                progress.eta_seconds
+            ))
+            .add_embed(CreateEmbe)
         })
-        .block()
         .await?;
 
+        if progress.is_finished() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+
+    let result = task.block().await?;
     let images = result
         .images
         .into_iter()
@@ -133,7 +151,7 @@ async fn paint(ctx: Context, client: &sd::Client, command: ApplicationCommandInt
         .create_interaction_response(&ctx.http, |response| {
             response
                 .kind(InteractionResponseType::ChannelMessageWithSource)
-                .interaction_response_data(|message| message.content("Generating..."))
+                .interaction_response_data(|message| message.content("Generating. 0.00% complete."))
         })
         .await
         .unwrap();
