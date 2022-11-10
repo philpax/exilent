@@ -4,7 +4,6 @@ use anyhow::Context as AnyhowContext;
 use dotenv::dotenv;
 use serenity::{
     async_trait,
-    builder::CreateEmbed,
     client::{Context, EventHandler},
     http::Http,
     model::{
@@ -99,7 +98,6 @@ async fn handle_generation(
                 progress.progress_factor * 100.0,
                 progress.eta_seconds
             ))
-            .add_embed(CreateEmbe)
         })
         .await?;
 
