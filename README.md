@@ -2,6 +2,8 @@
 
 A Discord bot, written in Rust, that provides a frontend to [AUTOMATIC1111's Stable Diffusion Web UI](https://github.com/AUTOMATIC1111/stable-diffusion-webui).
 
+Many thanks to [aiyabot](https://github.com/Kilvoctu/aiyabot), which paved the way for Discord bots for A1111. I just needed to build something to test [my client library](https://github.com/philpax/stable-diffusion-a1111-webui-client/) :)
+
 ## Setup
 
 - Set up your Web UI instance as per the instructions, adding `--api --listen` to the launch arguments.
