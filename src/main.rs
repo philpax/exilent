@@ -87,7 +87,7 @@ async fn handle_generation(
         restore_faces,
         sampler,
         ..Default::default()
-    });
+    })?;
 
     loop {
         let progress = task.progress().await?;
@@ -343,9 +343,15 @@ async fn main() {
     let sd_url = env::var("SD_URL").expect("SD_URL not specified");
     let sd_authentication = env::var("SD_USER").ok().zip(env::var("SD_PASS").ok());
 
-    let client = sd::Client::new(&sd_url, sd_authentication.as_ref().map(|p| (&*p.0, &*p.1)))
-        .await
-        .unwrap();
+    let client = sd::Client::new(
+        &sd_url,
+        sd_authentication
+            .as_ref()
+            .map(|p| sd::Authentication::ApiAuth(&p.0, &p.1))
+            .unwrap_or(sd::Authentication::None),
+    )
+    .await
+    .unwrap();
 
     // Build our client.
     let intents = GatewayIntents::default();
