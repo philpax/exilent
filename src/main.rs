@@ -157,6 +157,8 @@ async fn handle_generation(
         )
         .await?;
 
+    cmd.delete_original_interaction_response(http).await?;
+
     Ok(())
 }
 
