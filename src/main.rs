@@ -126,6 +126,13 @@ async fn handle_generation(
         })
         .collect::<anyhow::Result<Vec<_>>>()?;
 
+    let model = model.or_else(|| {
+        models.iter().find(|m| {
+            let Some(hash_wrapped) = m.title.split_ascii_whitespace().last() else { return false };
+            hash_wrapped[1..hash_wrapped.len() - 1] == result.info.model_hash
+        })
+    });
+
     cmd.delete_original_interaction_response(http).await?;
     for ((filename, bytes), seed) in images.iter().zip(result.info.seeds.iter()) {
         channel.send_files(
