@@ -58,6 +58,7 @@ fn value_to_bool(v: Option<&CommandDataOptionValue>) -> Option<bool> {
 
 async fn handle_generation(
     client: &sd::Client,
+    models: &[sd::Model],
     cmd: &ApplicationCommandInteraction,
     channel: ChannelId,
     http: &Http,
@@ -73,6 +74,8 @@ async fn handle_generation(
     let restore_faces = value_to_bool(get_value(cmd, "restore_faces"));
     let sampler = value_to_string(get_value(cmd, "sampler"))
         .and_then(|v| sd::Sampler::try_from(v.as_str()).ok());
+    let model =
+        value_to_string(get_value(cmd, "model")).and_then(|v| models.iter().find(|m| m.title == v));
 
     let task = client.generate_image_from_text(&sd::GenerationRequest {
         prompt: prompt.as_str(),
@@ -86,6 +89,7 @@ async fn handle_generation(
         tiling,
         restore_faces,
         sampler,
+        model,
         ..Default::default()
     })?;
 
@@ -133,7 +137,7 @@ async fn handle_generation(
                         .info
                         .seeds
                         .iter()
-                        .map(|seed| format!("`/paint prompt:{prompt} seed:{seed} count:{} width:{} height:{} guidance_scale:{} steps:{} tiling:{} restore_faces:{} sampler:{}`", result.info.seeds.len(), result.info.width, result.info.height, result.info.cfg_scale, result.info.steps, result.info.tiling, result.info.restore_faces, result.info.sampler.to_string()))
+                        .map(|seed| format!("`/paint prompt:{prompt} seed:{seed} count:1 width:{} height:{} guidance_scale:{} steps:{} tiling:{} restore_faces:{} sampler:{} {}`", result.info.width, result.info.height, result.info.cfg_scale, result.info.steps, result.info.tiling, result.info.restore_faces, result.info.sampler.to_string(), model.map(|m| format!("model:{}", m.name)).unwrap_or_default()))
                         .collect::<Vec<_>>()
                         .join("\n\n"),
                 )
@@ -144,7 +148,12 @@ async fn handle_generation(
     Ok(())
 }
 
-async fn paint(ctx: Context, client: &sd::Client, command: ApplicationCommandInteraction) {
+async fn paint(
+    ctx: Context,
+    client: &sd::Client,
+    models: &[sd::Model],
+    command: ApplicationCommandInteraction,
+) {
     command
         .create_interaction_response(&ctx.http, |response| {
             response
@@ -155,7 +164,7 @@ async fn paint(ctx: Context, client: &sd::Client, command: ApplicationCommandInt
         .unwrap();
 
     let channel = command.channel_id;
-    if let Err(err) = handle_generation(&client, &command, channel, &ctx.http).await {
+    if let Err(err) = handle_generation(&client, models, &command, channel, &ctx.http).await {
         channel
             .send_message(&ctx.http, |r| r.content(format!("Error: {err:?}")))
             .await
@@ -208,15 +217,18 @@ async fn exilent(ctx: Context, client: &sd::Client, cmd: ApplicationCommandInter
     }
 }
 
-struct Handler(sd::Client);
+struct Handler {
+    client: sd::Client,
+    models: Vec<sd::Model>,
+}
 #[async_trait]
 impl EventHandler for Handler {
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         let Interaction::ApplicationCommand(cmd) = interaction else { return };
 
         match cmd.data.name.as_str() {
-            "paint" => paint(ctx, &self.0, cmd).await,
-            "exilent" => exilent(ctx, &self.0, cmd).await,
+            "paint" => paint(ctx, &self.client, &self.models, cmd).await,
+            "exilent" => exilent(ctx, &self.client, cmd).await,
             _ => {}
         }
     }
@@ -314,6 +326,19 @@ impl EventHandler for Handler {
 
                     opt
                 })
+                .create_option(|option| {
+                    let opt = option
+                        .name("model")
+                        .description("The model to use")
+                        .kind(CommandOptionType::String)
+                        .required(false);
+
+                    for model in &self.models {
+                        opt.add_string_choice(&model.name, &model.title);
+                    }
+
+                    opt
+                })
         })
         .await
         .unwrap();
@@ -335,7 +360,7 @@ impl EventHandler for Handler {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> anyhow::Result<()> {
     dotenv().ok();
     // Configure the client with your Discord bot token in the environment.
     let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
@@ -353,11 +378,13 @@ async fn main() {
     .await
     .unwrap();
 
+    let models = client.models().await?;
+
     // Build our client.
     let intents = GatewayIntents::default();
 
     let mut client = Client::builder(token, intents)
-        .event_handler(Handler(client))
+        .event_handler(Handler { client, models })
         .await
         .expect("Error creating client");
 
@@ -367,4 +394,6 @@ async fn main() {
     if let Err(why) = client.start().await {
         println!("Client error: {:?}", why);
     }
+
+    Ok(())
 }
