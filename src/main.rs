@@ -126,38 +126,28 @@ async fn handle_generation(
         })
         .collect::<anyhow::Result<Vec<_>>>()?;
 
-    channel
-        .send_files(
+    cmd.delete_original_interaction_response(http).await?;
+    for ((filename, bytes), seed) in images.iter().zip(result.info.seeds.iter()) {
+        channel.send_files(
             &http,
-            images
-                .iter()
-                .map(|(name, bytes)| (bytes.as_slice(), name.as_str()))
-                .collect::<Vec<_>>(),
+            [(bytes.as_slice(), filename.as_str())],
             |m| {
-                m.content(
-                    result
-                        .info
-                        .seeds
-                        .iter()
-                        .map(|seed| format!("`/paint prompt:{prompt} seed:{seed} count:1 width:{} height:{} guidance_scale:{} steps:{} tiling:{} restore_faces:{} sampler:{} {} {}`",
-                            result.info.width,
-                            result.info.height,
-                            result.info.cfg_scale,
-                            result.info.steps,
-                            result.info.tiling,
-                            result.info.restore_faces,
-                            result.info.sampler.to_string(),
-                            negative_prompt.as_ref().map(|s| format!("negative_prompt:{s}")).unwrap_or_default(),
-                            model.map(|m| format!("model:{}", m.name)).unwrap_or_default())
-                        )
-                        .collect::<Vec<_>>()
-                        .join("\n\n"),
-                )
+                let message = format!("`/paint prompt:{prompt} seed:{seed} count:1 width:{} height:{} guidance_scale:{} steps:{} tiling:{} restore_faces:{} sampler:{} {} {}`",
+                    result.info.width,
+                    result.info.height,
+                    result.info.cfg_scale,
+                    result.info.steps,
+                    result.info.tiling,
+                    result.info.restore_faces,
+                    result.info.sampler.to_string(),
+                    negative_prompt.as_ref().map(|s| format!("negative_prompt:{s}")).unwrap_or_default(),
+                    model.map(|m| format!("model:{}", m.name)).unwrap_or_default()
+                );
+                m.content(message)
             },
         )
         .await?;
-
-    cmd.delete_original_interaction_response(http).await?;
+    }
 
     Ok(())
 }
