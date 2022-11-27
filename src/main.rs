@@ -64,6 +64,7 @@ async fn handle_generation(
     http: &Http,
 ) -> anyhow::Result<()> {
     let prompt = value_to_string(get_value(cmd, "prompt")).context("expected prompt")?;
+    let negative_prompt = value_to_string(get_value(cmd, "negative_prompt"));
     let seed = value_to_int(get_value(cmd, "seed"));
     let count = value_to_int(get_value(cmd, "count")).map(|v| v as u32);
     let width = value_to_int(get_value(cmd, "width")).map(|v| v as u32 / 64 * 64);
@@ -79,6 +80,7 @@ async fn handle_generation(
 
     let task = client.generate_image_from_text(&sd::GenerationRequest {
         prompt: prompt.as_str(),
+        negative_prompt: negative_prompt.as_deref(),
         seed,
         batch_size: Some(1),
         batch_count: count,
@@ -137,7 +139,17 @@ async fn handle_generation(
                         .info
                         .seeds
                         .iter()
-                        .map(|seed| format!("`/paint prompt:{prompt} seed:{seed} count:1 width:{} height:{} guidance_scale:{} steps:{} tiling:{} restore_faces:{} sampler:{} {}`", result.info.width, result.info.height, result.info.cfg_scale, result.info.steps, result.info.tiling, result.info.restore_faces, result.info.sampler.to_string(), model.map(|m| format!("model:{}", m.name)).unwrap_or_default()))
+                        .map(|seed| format!("`/paint prompt:{prompt} seed:{seed} count:1 width:{} height:{} guidance_scale:{} steps:{} tiling:{} restore_faces:{} sampler:{} {} {}`",
+                            result.info.width,
+                            result.info.height,
+                            result.info.cfg_scale,
+                            result.info.steps,
+                            result.info.tiling,
+                            result.info.restore_faces,
+                            result.info.sampler.to_string(),
+                            negative_prompt.as_ref().map(|s| format!("negative_prompt:{s}")).unwrap_or_default(),
+                            model.map(|m| format!("model:{}", m.name)).unwrap_or_default())
+                        )
                         .collect::<Vec<_>>()
                         .join("\n\n"),
                 )
@@ -246,6 +258,13 @@ impl EventHandler for Handler {
                         .description("The prompt to draw")
                         .kind(CommandOptionType::String)
                         .required(true)
+                })
+                .create_option(|option| {
+                    option
+                        .name("negative_prompt")
+                        .description("The prompt to avoid drawing")
+                        .kind(CommandOptionType::String)
+                        .required(false)
                 })
                 .create_option(|option| {
                     option
