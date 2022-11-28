@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     env,
     io::Cursor,
     sync::{Arc, Mutex},
@@ -156,7 +157,7 @@ impl Handler {
         mci: &MessageComponentInteraction,
         id: &str,
     ) -> anyhow::Result<()> {
-        self.retry_impl(http, mci, id, true, None).await
+        self.retry_impl(http, mci, id, true, None, None).await
     }
 
     async fn retry_with_prompt(
@@ -165,12 +166,12 @@ impl Handler {
         mci: &MessageComponentInteraction,
         id: &str,
     ) -> anyhow::Result<()> {
-        let old_prompt = self
+        let (old_prompt, negative_prompt) = self
             .store
             .lock()
             .unwrap()
             .get(id)
-            .map(|g| g.prompt.clone())
+            .map(|g| (g.prompt.clone(), g.negative_prompt.clone()))
             .unwrap_or_default();
 
         mci.create_interaction_response(http, |r| {
@@ -179,11 +180,20 @@ impl Handler {
                     d.components(|c| {
                         c.create_action_row(|r| {
                             r.create_input_text(|t| {
-                                t.label("New prompt")
+                                t.label("Prompt")
+                                    .custom_id("prompt")
                                     .required(true)
-                                    .custom_id("new_prompt")
                                     .style(InputTextStyle::Short)
                                     .value(old_prompt)
+                            })
+                        })
+                        .create_action_row(|r| {
+                            r.create_input_text(|t| {
+                                t.label("Negative prompt")
+                                    .custom_id("negative_prompt")
+                                    .required(false)
+                                    .style(InputTextStyle::Short)
+                                    .value(negative_prompt.unwrap_or_default())
                             })
                         })
                     })
@@ -202,17 +212,24 @@ impl Handler {
         msi: &ModalSubmitInteraction,
         id: &str,
     ) -> anyhow::Result<()> {
-        let new_prompt = msi
+        let rows: HashMap<String, String> = msi
             .data
             .components
             .iter()
             .flat_map(|r| r.components.iter())
-            .find_map(|c| {
-                let component::ActionRowComponent::InputText(it) = c else { return None };
-                (it.custom_id == "new_prompt").then(|| it.value.clone())
-            });
+            .filter_map(|c| {
+                if let component::ActionRowComponent::InputText(it) = c {
+                    Some((it.custom_id.clone(), it.value.clone()))
+                } else {
+                    return None;
+                }
+            })
+            .collect();
 
-        self.retry_impl(http, msi, id, false, new_prompt.as_deref())
+        let prompt = rows.get("prompt").map(|s| s.as_str());
+        let negative_prompt = rows.get("negative_prompt").map(|s| s.as_str());
+
+        self.retry_impl(http, msi, id, false, prompt, negative_prompt)
             .await
     }
 
@@ -222,7 +239,8 @@ impl Handler {
         interaction: &dyn GenerationInteraction,
         id: &str,
         reset_seed: bool,
-        new_prompt: Option<&str>,
+        prompt: Option<&str>,
+        negative_prompt: Option<&str>,
     ) -> anyhow::Result<()> {
         interaction.create(http).await?;
 
@@ -238,8 +256,11 @@ impl Handler {
         if reset_seed {
             generation_request.seed = None;
         }
-        if let Some(new_prompt) = new_prompt {
-            generation_request.prompt = new_prompt;
+        if let Some(prompt) = prompt {
+            generation_request.prompt = prompt;
+        }
+        if let Some(negative_prompt) = negative_prompt {
+            generation_request.negative_prompt = Some(negative_prompt);
         }
 
         issue_generation_task(
