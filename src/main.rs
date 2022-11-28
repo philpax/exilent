@@ -157,7 +157,7 @@ impl Handler {
         mci: &MessageComponentInteraction,
         id: &str,
     ) -> anyhow::Result<()> {
-        self.retry_impl(http, mci, id, true, None, None).await
+        self.retry_impl(http, mci, id, None, None, Some(None)).await
     }
 
     async fn retry_with_prompt(
@@ -166,12 +166,12 @@ impl Handler {
         mci: &MessageComponentInteraction,
         id: &str,
     ) -> anyhow::Result<()> {
-        let (old_prompt, negative_prompt) = self
+        let (old_prompt, negative_prompt, seed) = self
             .store
             .lock()
             .unwrap()
             .get(id)
-            .map(|g| (g.prompt.clone(), g.negative_prompt.clone()))
+            .map(|g| (g.prompt.clone(), g.negative_prompt.clone(), Some(g.seed)))
             .unwrap_or_default();
 
         mci.create_interaction_response(http, |r| {
@@ -194,6 +194,15 @@ impl Handler {
                                     .required(false)
                                     .style(InputTextStyle::Short)
                                     .value(negative_prompt.unwrap_or_default())
+                            })
+                        })
+                        .create_action_row(|r| {
+                            r.create_input_text(|t| {
+                                t.label("Seed")
+                                    .custom_id("seed")
+                                    .required(false)
+                                    .style(InputTextStyle::Short)
+                                    .value(seed.unwrap_or_default())
                             })
                         })
                     })
@@ -228,8 +237,9 @@ impl Handler {
 
         let prompt = rows.get("prompt").map(|s| s.as_str());
         let negative_prompt = rows.get("negative_prompt").map(|s| s.as_str());
+        let seed = rows.get("seed").map(|s| s.parse::<i64>().ok());
 
-        self.retry_impl(http, msi, id, false, prompt, negative_prompt)
+        self.retry_impl(http, msi, id, prompt, negative_prompt, seed)
             .await
     }
 
@@ -238,9 +248,10 @@ impl Handler {
         http: &Http,
         interaction: &dyn GenerationInteraction,
         id: &str,
-        reset_seed: bool,
         prompt: Option<&str>,
         negative_prompt: Option<&str>,
+        // None: don't override; Some(None): override with a fresh seed; Some(Some(seed)): override with seed
+        seed: Option<Option<i64>>,
     ) -> anyhow::Result<()> {
         interaction.create(http).await?;
 
@@ -253,14 +264,14 @@ impl Handler {
             .clone();
 
         let mut generation_request = generation.as_generation_request(&self.models);
-        if reset_seed {
-            generation_request.seed = None;
-        }
         if let Some(prompt) = prompt {
             generation_request.prompt = prompt;
         }
         if let Some(negative_prompt) = negative_prompt {
             generation_request.negative_prompt = Some(negative_prompt);
+        }
+        if let Some(seed) = seed {
+            generation_request.seed = seed;
         }
 
         issue_generation_task(
