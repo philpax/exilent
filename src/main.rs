@@ -81,17 +81,6 @@ struct Handler {
     store: Arc<Mutex<Store>>,
 }
 impl Handler {
-    async fn paint(&self, http: &Http, cmd: ApplicationCommandInteraction) -> anyhow::Result<()> {
-        cmd.create_interaction_response(http, |response| {
-            response
-                .kind(InteractionResponseType::ChannelMessageWithSource)
-                .interaction_response_data(|message| message.content("Generating..."))
-        })
-        .await?;
-
-        handle_generation(&self.client, &self.models, self.store.clone(), &cmd, http).await
-    }
-
     async fn exilent(&self, http: &Http, cmd: ApplicationCommandInteraction) -> anyhow::Result<()> {
         let channel = cmd.channel_id;
         let texts = match self.client.embeddings().await {
@@ -116,6 +105,49 @@ impl Handler {
         }
 
         Ok(())
+    }
+
+    async fn paint(&self, http: &Http, aci: ApplicationCommandInteraction) -> anyhow::Result<()> {
+        aci.create_interaction_response(http, |response| {
+            response
+                .kind(InteractionResponseType::ChannelMessageWithSource)
+                .interaction_response_data(|message| message.content("Generating..."))
+        })
+        .await?;
+
+        let prompt =
+            util::value_to_string(util::get_value(&aci, "prompt")).context("expected prompt")?;
+        let negative_prompt = util::value_to_string(util::get_value(&aci, "negative_prompt"));
+
+        issue_generation_task(
+            &self.client,
+            &self.models,
+            self.store.clone(),
+            http,
+            &aci,
+            &sd::GenerationRequest {
+                prompt: prompt.as_str(),
+                negative_prompt: negative_prompt.as_deref(),
+                seed: util::value_to_int(util::get_value(&aci, "seed")),
+                batch_size: Some(1),
+                batch_count: util::value_to_int(util::get_value(&aci, "count")).map(|v| v as u32),
+                width: util::value_to_int(util::get_value(&aci, "width"))
+                    .map(|v| v as u32 / 64 * 64),
+                height: util::value_to_int(util::get_value(&aci, "height"))
+                    .map(|v| v as u32 / 64 * 64),
+                cfg_scale: util::value_to_number(util::get_value(&aci, "guidance"))
+                    .map(|v| v as f32),
+                steps: util::value_to_int(util::get_value(&aci, "steps")).map(|v| v as u32),
+                tiling: util::value_to_bool(util::get_value(&aci, "tiling")),
+                restore_faces: util::value_to_bool(util::get_value(&aci, "restore_faces")),
+                sampler: util::value_to_string(util::get_value(&aci, "sampler"))
+                    .and_then(|v| sd::Sampler::try_from(v.as_str()).ok()),
+                model: util::value_to_string(util::get_value(&aci, "model"))
+                    .and_then(|v| self.models.iter().find(|m| m.title == v)),
+                ..Default::default()
+            },
+        )
+        .await
     }
 
     async fn retry(
@@ -413,45 +445,6 @@ impl EventHandler for Handler {
             }
         }
     }
-}
-
-async fn handle_generation(
-    client: &sd::Client,
-    models: &[sd::Model],
-    store: Arc<Mutex<Store>>,
-    cmd: &ApplicationCommandInteraction,
-    http: &Http,
-) -> anyhow::Result<()> {
-    let prompt =
-        util::value_to_string(util::get_value(cmd, "prompt")).context("expected prompt")?;
-    let negative_prompt = util::value_to_string(util::get_value(cmd, "negative_prompt"));
-
-    issue_generation_task(
-        client,
-        models,
-        store,
-        http,
-        cmd,
-        &sd::GenerationRequest {
-            prompt: prompt.as_str(),
-            negative_prompt: negative_prompt.as_deref(),
-            seed: util::value_to_int(util::get_value(cmd, "seed")),
-            batch_size: Some(1),
-            batch_count: util::value_to_int(util::get_value(cmd, "count")).map(|v| v as u32),
-            width: util::value_to_int(util::get_value(cmd, "width")).map(|v| v as u32 / 64 * 64),
-            height: util::value_to_int(util::get_value(cmd, "height")).map(|v| v as u32 / 64 * 64),
-            cfg_scale: util::value_to_number(util::get_value(cmd, "guidance")).map(|v| v as f32),
-            steps: util::value_to_int(util::get_value(cmd, "steps")).map(|v| v as u32),
-            tiling: util::value_to_bool(util::get_value(cmd, "tiling")),
-            restore_faces: util::value_to_bool(util::get_value(cmd, "restore_faces")),
-            sampler: util::value_to_string(util::get_value(cmd, "sampler"))
-                .and_then(|v| sd::Sampler::try_from(v.as_str()).ok()),
-            model: util::value_to_string(util::get_value(cmd, "model"))
-                .and_then(|v| models.iter().find(|m| m.title == v)),
-            ..Default::default()
-        },
-    )
-    .await
 }
 
 async fn issue_generation_task(
