@@ -1,4 +1,9 @@
-use std::{env, io::Cursor, time::Duration};
+use std::{
+    env,
+    io::Cursor,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use anyhow::Context as AnyhowContext;
 use dotenv::dotenv;
@@ -10,8 +15,10 @@ use serenity::{
         application::interaction::{Interaction, InteractionResponseType},
         prelude::{
             command::{Command, CommandOptionType},
-            interaction::application_command::{
-                ApplicationCommandInteraction, CommandDataOptionValue,
+            component::InputTextStyle,
+            interaction::{
+                application_command::ApplicationCommandInteraction,
+                message_component::MessageComponentInteraction, modal::ModalSubmitInteraction,
             },
             *,
         },
@@ -20,230 +27,205 @@ use serenity::{
 };
 
 use stable_diffusion_a1111_webui_client as sd;
+use store::Store;
 
-fn get_value<'a>(
-    cmd: &'a ApplicationCommandInteraction,
-    name: &'a str,
-) -> Option<&'a CommandDataOptionValue> {
-    cmd.data
-        .options
-        .iter()
-        .find(|v| v.name == name)
-        .and_then(|v| v.resolved.as_ref())
-}
-fn value_to_int(v: Option<&CommandDataOptionValue>) -> Option<i64> {
-    match v? {
-        CommandDataOptionValue::Integer(v) => Some(*v),
-        _ => None,
-    }
-}
-fn value_to_number(v: Option<&CommandDataOptionValue>) -> Option<f64> {
-    match v? {
-        CommandDataOptionValue::Number(v) => Some(*v),
-        _ => None,
-    }
-}
-fn value_to_string(v: Option<&CommandDataOptionValue>) -> Option<String> {
-    match v? {
-        CommandDataOptionValue::String(v) => Some(v.clone()),
-        _ => None,
-    }
-}
-fn value_to_bool(v: Option<&CommandDataOptionValue>) -> Option<bool> {
-    match v? {
-        CommandDataOptionValue::Boolean(v) => Some(*v),
-        _ => None,
-    }
-}
+mod store;
+mod util;
 
-async fn handle_generation(
-    client: &sd::Client,
-    models: &[sd::Model],
-    cmd: &ApplicationCommandInteraction,
-    channel: ChannelId,
-    http: &Http,
-) -> anyhow::Result<()> {
-    let prompt = value_to_string(get_value(cmd, "prompt")).context("expected prompt")?;
-    let negative_prompt = value_to_string(get_value(cmd, "negative_prompt"));
-    let seed = value_to_int(get_value(cmd, "seed"));
-    let count = value_to_int(get_value(cmd, "count")).map(|v| v as u32);
-    let width = value_to_int(get_value(cmd, "width")).map(|v| v as u32 / 64 * 64);
-    let height = value_to_int(get_value(cmd, "height")).map(|v| v as u32 / 64 * 64);
-    let guidance = value_to_number(get_value(cmd, "guidance")).map(|v| v as f32);
-    let steps = value_to_int(get_value(cmd, "steps")).map(|v| v as u32);
-    let tiling = value_to_bool(get_value(cmd, "tiling"));
-    let restore_faces = value_to_bool(get_value(cmd, "restore_faces"));
-    let sampler = value_to_string(get_value(cmd, "sampler"))
-        .and_then(|v| sd::Sampler::try_from(v.as_str()).ok());
-    let model =
-        value_to_string(get_value(cmd, "model")).and_then(|v| models.iter().find(|m| m.title == v));
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    dotenv().ok();
 
-    let task = client.generate_image_from_text(&sd::GenerationRequest {
-        prompt: prompt.as_str(),
-        negative_prompt: negative_prompt.as_deref(),
-        seed,
-        batch_size: Some(1),
-        batch_count: count,
-        width,
-        height,
-        cfg_scale: guidance,
-        steps,
-        tiling,
-        restore_faces,
-        sampler,
-        model,
-        ..Default::default()
-    })?;
-
-    loop {
-        let progress = task.progress().await?;
-
-        cmd.edit_original_interaction_response(http, |m| {
-            m.content(format!(
-                "Generating. {:.02}% complete. ({:.02} seconds remaining)",
-                progress.progress_factor * 100.0,
-                progress.eta_seconds
-            ))
-        })
-        .await?;
-
-        if progress.is_finished() {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(250)).await;
-    }
-
-    let result = task.block().await?;
-    let images = result
-        .images
-        .into_iter()
-        .enumerate()
-        .map(|(idx, image)| {
-            let mut bytes: Vec<u8> = Vec::new();
-            let mut cursor = Cursor::new(&mut bytes);
-            image.write_to(&mut cursor, image::ImageOutputFormat::Png)?;
-            Ok((format!("image_{idx}.png"), bytes))
-        })
-        .collect::<anyhow::Result<Vec<_>>>()?;
-
-    let model = model.or_else(|| {
-        models.iter().find(|m| {
-            let Some(hash_wrapped) = m.title.split_ascii_whitespace().last() else { return false };
-            hash_wrapped[1..hash_wrapped.len() - 1] == result.info.model_hash
-        })
-    });
-
-    cmd.delete_original_interaction_response(http).await?;
-    for ((filename, bytes), seed) in images.iter().zip(result.info.seeds.iter()) {
-        channel.send_files(
-            &http,
-            [(bytes.as_slice(), filename.as_str())],
-            |m| {
-                let message = format!("`/paint prompt:{prompt} seed:{seed} count:1 width:{} height:{} guidance_scale:{} steps:{} tiling:{} restore_faces:{} sampler:{} {} {}`",
-                    result.info.width,
-                    result.info.height,
-                    result.info.cfg_scale,
-                    result.info.steps,
-                    result.info.tiling,
-                    result.info.restore_faces,
-                    result.info.sampler.to_string(),
-                    negative_prompt.as_ref().map(|s| format!("negative_prompt:{s}")).unwrap_or_default(),
-                    model.map(|m| format!("model:{}", m.name)).unwrap_or_default()
-                );
-                m.content(message)
-            },
+    let client = {
+        let sd_url = env::var("SD_URL").expect("SD_URL not specified");
+        let sd_authentication = env::var("SD_USER").ok().zip(env::var("SD_PASS").ok());
+        sd::Client::new(
+            &sd_url,
+            sd_authentication
+                .as_ref()
+                .map(|p| sd::Authentication::ApiAuth(&p.0, &p.1))
+                .unwrap_or(sd::Authentication::None),
         )
-        .await?;
+        .await
+        .unwrap()
+    };
+    let models = client.models().await?;
+    let store = Arc::new(Mutex::new(Store::load()?));
+
+    // Build our client.
+    let mut client = Client::builder(
+        env::var("DISCORD_TOKEN").expect("Expected a token in the environment"),
+        GatewayIntents::default(),
+    )
+    .event_handler(Handler {
+        client,
+        models,
+        store,
+    })
+    .await
+    .expect("Error creating client");
+
+    // Finally, start a single shard, and start listening to events.
+    // Shards will automatically attempt to reconnect, and will perform
+    // exponential backoff until it reconnects.
+    if let Err(why) = client.start().await {
+        println!("Client error: {:?}", why);
     }
 
     Ok(())
 }
 
-async fn paint(
-    ctx: Context,
-    client: &sd::Client,
-    models: &[sd::Model],
-    command: ApplicationCommandInteraction,
-) {
-    command
-        .create_interaction_response(&ctx.http, |response| {
-            response
-                .kind(InteractionResponseType::ChannelMessageWithSource)
-                .interaction_response_data(|message| message.content("Generating. 0.00% complete."))
-        })
-        .await
-        .unwrap();
-
-    let channel = command.channel_id;
-    if let Err(err) = handle_generation(&client, models, &command, channel, &ctx.http).await {
-        channel
-            .send_message(&ctx.http, |r| r.content(format!("Error: {err:?}")))
-            .await
-            .ok();
-    }
-}
-
-fn generate_chunked_strings(
-    strings: impl Iterator<Item = String>,
-    threshold: usize,
-) -> Vec<String> {
-    let mut texts = vec![String::new()];
-    for string in strings {
-        if texts.last().map(|t| t.len()) >= Some(threshold) {
-            texts.push(String::new());
-        }
-        if let Some(last) = texts.last_mut() {
-            if !last.is_empty() {
-                *last += ", ";
-            }
-            *last += &string;
-        }
-    }
-    texts
-}
-
-async fn exilent(ctx: Context, client: &sd::Client, cmd: ApplicationCommandInteraction) {
-    let channel = cmd.channel_id;
-    let texts = match client.embeddings().await {
-        Ok(embeddings) => {
-            generate_chunked_strings(embeddings.iter().map(|s| format!("`{s}`")), 1900)
-        }
-        Err(err) => vec![format!("{err:?}")],
-    };
-    cmd.create_interaction_response(&ctx.http, |response| {
-        response
-            .kind(InteractionResponseType::ChannelMessageWithSource)
-            .interaction_response_data(|message| {
-                message.title("Embeddings").content(texts.first().unwrap())
-            })
-    })
-    .await
-    .unwrap();
-
-    for remainder in texts.iter().skip(1) {
-        channel
-            .send_message(&ctx.http, |msg| msg.content(remainder))
-            .await
-            .unwrap();
-    }
-}
-
 struct Handler {
     client: sd::Client,
     models: Vec<sd::Model>,
+    store: Arc<Mutex<Store>>,
 }
-#[async_trait]
-impl EventHandler for Handler {
-    async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
-        let Interaction::ApplicationCommand(cmd) = interaction else { return };
+impl Handler {
+    async fn paint(&self, http: &Http, cmd: ApplicationCommandInteraction) -> anyhow::Result<()> {
+        cmd.create_interaction_response(http, |response| {
+            response
+                .kind(InteractionResponseType::ChannelMessageWithSource)
+                .interaction_response_data(|message| message.content("Generating..."))
+        })
+        .await?;
 
-        match cmd.data.name.as_str() {
-            "paint" => paint(ctx, &self.client, &self.models, cmd).await,
-            "exilent" => exilent(ctx, &self.client, cmd).await,
-            _ => {}
-        }
+        handle_generation(&self.client, &self.models, self.store.clone(), &cmd, http).await
     }
 
+    async fn exilent(&self, http: &Http, cmd: ApplicationCommandInteraction) -> anyhow::Result<()> {
+        let channel = cmd.channel_id;
+        let texts = match self.client.embeddings().await {
+            Ok(embeddings) => {
+                util::generate_chunked_strings(embeddings.iter().map(|s| format!("`{s}`")), 1900)
+            }
+            Err(err) => vec![format!("{err:?}")],
+        };
+        cmd.create_interaction_response(http, |response| {
+            response
+                .kind(InteractionResponseType::ChannelMessageWithSource)
+                .interaction_response_data(|message| {
+                    message.title("Embeddings").content(texts.first().unwrap())
+                })
+        })
+        .await?;
+
+        for remainder in texts.iter().skip(1) {
+            channel
+                .send_message(http, |msg| msg.content(remainder))
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn retry(
+        &self,
+        http: &Http,
+        mci: &MessageComponentInteraction,
+        id: &str,
+    ) -> anyhow::Result<()> {
+        self.retry_impl(http, mci, id, true, None).await
+    }
+
+    async fn retry_with_prompt(
+        &self,
+        http: &Http,
+        mci: &MessageComponentInteraction,
+        id: &str,
+    ) -> anyhow::Result<()> {
+        let old_prompt = self
+            .store
+            .lock()
+            .unwrap()
+            .get(id)
+            .map(|g| g.prompt.clone())
+            .unwrap_or_default();
+
+        mci.create_interaction_response(http, |r| {
+            r.kind(InteractionResponseType::Modal)
+                .interaction_response_data(|d| {
+                    d.components(|c| {
+                        c.create_action_row(|r| {
+                            r.create_input_text(|t| {
+                                t.label("New prompt")
+                                    .required(true)
+                                    .custom_id("new_prompt")
+                                    .style(InputTextStyle::Short)
+                                    .value(old_prompt)
+                            })
+                        })
+                    })
+                    .title("Retry with prompt")
+                    .custom_id(format!("{id}#retry_with_prompt_response"))
+                })
+        })
+        .await?;
+
+        Ok(())
+    }
+
+    async fn retry_with_prompt_response(
+        &self,
+        http: &Http,
+        msi: &ModalSubmitInteraction,
+        id: &str,
+    ) -> anyhow::Result<()> {
+        let new_prompt = msi
+            .data
+            .components
+            .iter()
+            .flat_map(|r| r.components.iter())
+            .find_map(|c| {
+                let component::ActionRowComponent::InputText(it) = c else { return None };
+                (it.custom_id == "new_prompt").then(|| it.value.clone())
+            });
+
+        self.retry_impl(http, msi, id, false, new_prompt.as_deref())
+            .await
+    }
+
+    async fn retry_impl(
+        &self,
+        http: &Http,
+        interaction: &dyn GenerationInteraction,
+        id: &str,
+        reset_seed: bool,
+        new_prompt: Option<&str>,
+    ) -> anyhow::Result<()> {
+        interaction.create(http).await?;
+
+        let generation = self
+            .store
+            .lock()
+            .unwrap()
+            .get(id)
+            .context("id not found in store")?
+            .clone();
+
+        let mut generation_request = generation.as_generation_request(&self.models);
+        if reset_seed {
+            generation_request.seed = None;
+        }
+        if let Some(new_prompt) = new_prompt {
+            generation_request.prompt = new_prompt;
+        }
+
+        issue_generation_task(
+            &self.client,
+            &self.models,
+            self.store.clone(),
+            http,
+            interaction,
+            &generation_request,
+        )
+        .await?;
+
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
 
@@ -375,43 +357,230 @@ impl EventHandler for Handler {
         .await
         .unwrap();
     }
+
+    async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
+        let mut channel_id = None;
+        let result = match interaction {
+            Interaction::ApplicationCommand(cmd) => {
+                channel_id = Some(cmd.channel_id);
+                match cmd.data.name.as_str() {
+                    "paint" => self.paint(&ctx.http, cmd).await,
+                    "exilent" => self.exilent(&ctx.http, cmd).await,
+                    _ => Ok(()),
+                }
+            }
+            Interaction::MessageComponent(cmp) => {
+                channel_id = Some(cmp.channel_id);
+
+                let (id, int_cmd) = cmp
+                    .data
+                    .custom_id
+                    .split_once('#')
+                    .expect("invalid interaction id");
+
+                match int_cmd {
+                    "retry" => self.retry(&ctx.http, &cmp, id).await,
+                    "retry_with_prompt" => self.retry_with_prompt(&ctx.http, &cmp, id).await,
+                    _ => Ok(()),
+                }
+            }
+            Interaction::ModalSubmit(msi) => {
+                channel_id = Some(msi.channel_id);
+
+                let (id, int_cmd) = msi
+                    .data
+                    .custom_id
+                    .split_once('#')
+                    .expect("invalid interaction id");
+
+                match int_cmd {
+                    "retry_with_prompt_response" => {
+                        self.retry_with_prompt_response(&ctx.http, &msi, id).await
+                    }
+
+                    _ => Ok(()),
+                }
+            }
+            _ => Ok(()),
+        };
+        if let Some(channel_id) = channel_id {
+            let http = &ctx.http;
+            if let Err(err) = result {
+                channel_id
+                    .send_message(http, |r| r.content(format!("Error: {err:?}")))
+                    .await
+                    .ok();
+            }
+        }
+    }
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    dotenv().ok();
-    // Configure the client with your Discord bot token in the environment.
-    let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
+async fn handle_generation(
+    client: &sd::Client,
+    models: &[sd::Model],
+    store: Arc<Mutex<Store>>,
+    cmd: &ApplicationCommandInteraction,
+    http: &Http,
+) -> anyhow::Result<()> {
+    let prompt =
+        util::value_to_string(util::get_value(cmd, "prompt")).context("expected prompt")?;
+    let negative_prompt = util::value_to_string(util::get_value(cmd, "negative_prompt"));
 
-    let sd_url = env::var("SD_URL").expect("SD_URL not specified");
-    let sd_authentication = env::var("SD_USER").ok().zip(env::var("SD_PASS").ok());
-
-    let client = sd::Client::new(
-        &sd_url,
-        sd_authentication
-            .as_ref()
-            .map(|p| sd::Authentication::ApiAuth(&p.0, &p.1))
-            .unwrap_or(sd::Authentication::None),
+    issue_generation_task(
+        client,
+        models,
+        store,
+        http,
+        cmd,
+        &sd::GenerationRequest {
+            prompt: prompt.as_str(),
+            negative_prompt: negative_prompt.as_deref(),
+            seed: util::value_to_int(util::get_value(cmd, "seed")),
+            batch_size: Some(1),
+            batch_count: util::value_to_int(util::get_value(cmd, "count")).map(|v| v as u32),
+            width: util::value_to_int(util::get_value(cmd, "width")).map(|v| v as u32 / 64 * 64),
+            height: util::value_to_int(util::get_value(cmd, "height")).map(|v| v as u32 / 64 * 64),
+            cfg_scale: util::value_to_number(util::get_value(cmd, "guidance")).map(|v| v as f32),
+            steps: util::value_to_int(util::get_value(cmd, "steps")).map(|v| v as u32),
+            tiling: util::value_to_bool(util::get_value(cmd, "tiling")),
+            restore_faces: util::value_to_bool(util::get_value(cmd, "restore_faces")),
+            sampler: util::value_to_string(util::get_value(cmd, "sampler"))
+                .and_then(|v| sd::Sampler::try_from(v.as_str()).ok()),
+            model: util::value_to_string(util::get_value(cmd, "model"))
+                .and_then(|v| models.iter().find(|m| m.title == v)),
+            ..Default::default()
+        },
     )
     .await
-    .unwrap();
+}
 
-    let models = client.models().await?;
+async fn issue_generation_task(
+    client: &sd::Client,
+    models: &[sd::Model],
+    store: Arc<Mutex<Store>>,
+    http: &Http,
+    interaction: &dyn GenerationInteraction,
+    request: &sd::GenerationRequest<'_>,
+) -> anyhow::Result<()> {
+    let prompt = request.prompt;
+    let negative_prompt = request.negative_prompt;
 
-    // Build our client.
-    let intents = GatewayIntents::default();
+    // generate and updat eprogress
+    let task = client.generate_image_from_text(&request)?;
+    loop {
+        let progress = task.progress().await?;
 
-    let mut client = Client::builder(token, intents)
-        .event_handler(Handler { client, models })
-        .await
-        .expect("Error creating client");
-
-    // Finally, start a single shard, and start listening to events.
-    // Shards will automatically attempt to reconnect, and will perform
-    // exponential backoff until it reconnects.
-    if let Err(why) = client.start().await {
-        println!("Client error: {:?}", why);
+        interaction
+            .edit(
+                http,
+                &format!(
+                    "{:.02}% complete. ({:.02} seconds remaining)",
+                    progress.progress_factor * 100.0,
+                    progress.eta_seconds
+                ),
+            )
+            .await?;
+        if progress.is_finished() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
     }
 
+    // retrieve result
+    let result = task.block().await?;
+    let images = result
+        .images
+        .into_iter()
+        .enumerate()
+        .map(|(idx, image)| {
+            let mut bytes: Vec<u8> = Vec::new();
+            let mut cursor = Cursor::new(&mut bytes);
+            image.write_to(&mut cursor, image::ImageOutputFormat::Png)?;
+            Ok((format!("image_{idx}.png"), bytes))
+        })
+        .collect::<anyhow::Result<Vec<_>>>()?;
+
+    // delete original message, send images
+    interaction.delete(http).await?;
+    for ((filename, bytes), seed) in images.iter().zip(result.info.seeds.iter()) {
+        let generation = store::Generation {
+            prompt: prompt.to_owned(),
+            seed: *seed,
+            width: result.info.width,
+            height: result.info.height,
+            cfg_scale: result.info.cfg_scale,
+            steps: result.info.steps,
+            tiling: result.info.tiling,
+            restore_faces: result.info.restore_faces,
+            sampler: result.info.sampler,
+            negative_prompt: negative_prompt.map(|s| s.to_string()),
+            model_hash: result.info.model_hash.clone(),
+            image_bytes: bytes.clone(),
+        };
+        let message = generation.as_message(models);
+        let store_key = store.lock().unwrap().insert(generation)?;
+
+        interaction
+            .channel_id()
+            .send_files(&http, [(bytes.as_slice(), filename.as_str())], |m| {
+                m.content(message).components(|c| {
+                    c.create_action_row(|r| {
+                        r.create_button(|b| {
+                            b.emoji("🔃".parse::<ReactionType>().unwrap())
+                                .label("Retry (new seed)")
+                                .style(component::ButtonStyle::Secondary)
+                                .custom_id(format!("{store_key}#retry"))
+                        })
+                        .create_button(|b| {
+                            b.emoji("↪️".parse::<ReactionType>().unwrap())
+                                .label("Retry (same seed, different prompt)")
+                                .style(component::ButtonStyle::Secondary)
+                                .custom_id(format!("{store_key}#retry_with_prompt"))
+                        })
+                    })
+                })
+            })
+            .await?;
+    }
     Ok(())
 }
+
+#[async_trait]
+trait GenerationInteraction: Send + Sync {
+    async fn create(&self, http: &Http) -> anyhow::Result<()>;
+    async fn edit(&self, http: &Http, msg: &str) -> anyhow::Result<()>;
+    async fn delete(&self, http: &Http) -> anyhow::Result<()>;
+    fn channel_id(&self) -> ChannelId;
+}
+
+macro_rules! implement_interaction {
+    ($name:ident) => {
+        #[async_trait]
+        impl GenerationInteraction for $name {
+            async fn create(&self, http: &Http) -> anyhow::Result<()> {
+                Ok(self
+                    .create_interaction_response(http, |response| {
+                        response
+                            .kind(InteractionResponseType::ChannelMessageWithSource)
+                            .interaction_response_data(|message| message.content("Generating..."))
+                    })
+                    .await?)
+            }
+            async fn edit(&self, http: &Http, msg: &str) -> anyhow::Result<()> {
+                Ok(self
+                    .edit_original_interaction_response(http, |r| r.content(msg))
+                    .await
+                    .map(|_| ())?)
+            }
+            async fn delete(&self, http: &Http) -> anyhow::Result<()> {
+                Ok(self.delete_original_interaction_response(http).await?)
+            }
+            fn channel_id(&self) -> ChannelId {
+                self.channel_id
+            }
+        }
+    };
+}
+implement_interaction!(ApplicationCommandInteraction);
+implement_interaction!(MessageComponentInteraction);
+implement_interaction!(ModalSubmitInteraction);
