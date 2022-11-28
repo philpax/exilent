@@ -493,9 +493,13 @@ async fn issue_generation_task(
         })
         .collect::<anyhow::Result<Vec<_>>>()?;
 
-    // delete original message, send images
-    interaction.delete(http).await?;
-    for ((filename, bytes), seed) in images.iter().zip(result.info.seeds.iter()) {
+    // send images
+    for (idx, ((filename, bytes), seed)) in images.iter().zip(result.info.seeds.iter()).enumerate()
+    {
+        interaction
+            .edit(http, &format!("Uploading {}/{}...", idx + 1, images.len()))
+            .await?;
+
         let generation = store::Generation {
             prompt: prompt.to_owned(),
             seed: *seed,
@@ -506,7 +510,9 @@ async fn issue_generation_task(
             tiling: result.info.tiling,
             restore_faces: result.info.restore_faces,
             sampler: result.info.sampler,
-            negative_prompt: negative_prompt.map(|s| s.to_string()),
+            negative_prompt: negative_prompt
+                .map(|s| s.to_string())
+                .filter(|p| !p.is_empty()),
             model_hash: result.info.model_hash.clone(),
             image_bytes: bytes.clone(),
         };
@@ -541,6 +547,8 @@ async fn issue_generation_task(
             })
             .await?;
     }
+    interaction.delete(http).await?;
+
     Ok(())
 }
 
