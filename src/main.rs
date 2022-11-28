@@ -531,7 +531,13 @@ async fn issue_generation_task(
                                 .custom_id(format!("{store_key}#retry_with_prompt"))
                         })
                     })
-                })
+                });
+
+                if let Some(message) = interaction.message() {
+                    m.reference_message(message);
+                }
+
+                m
             })
             .await?;
     }
@@ -544,6 +550,7 @@ trait GenerationInteraction: Send + Sync {
     async fn edit(&self, http: &Http, msg: &str) -> anyhow::Result<()>;
     async fn delete(&self, http: &Http) -> anyhow::Result<()>;
     fn channel_id(&self) -> ChannelId;
+    fn message(&self) -> Option<&Message>;
 }
 
 macro_rules! implement_interaction {
@@ -571,6 +578,24 @@ macro_rules! implement_interaction {
             fn channel_id(&self) -> ChannelId {
                 self.channel_id
             }
+            interaction_message!($name);
+        }
+    };
+}
+macro_rules! interaction_message {
+    (ApplicationCommandInteraction) => {
+        fn message(&self) -> Option<&Message> {
+            None
+        }
+    };
+    (MessageComponentInteraction) => {
+        fn message(&self) -> Option<&Message> {
+            Some(&self.message)
+        }
+    };
+    (ModalSubmitInteraction) => {
+        fn message(&self) -> Option<&Message> {
+            self.message.as_ref()
         }
     };
 }
