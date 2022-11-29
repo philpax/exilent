@@ -548,7 +548,11 @@ async fn issue_generation_task(
             model_hash: result.info.model_hash.clone(),
             image_bytes: bytes.clone(),
         };
-        let message = generation.as_message(models);
+        let message = format!(
+            "{} - {}",
+            generation.as_message(models),
+            interaction.user().mention()
+        );
         let store_key = store.lock().unwrap().insert(generation)?;
 
         interaction
@@ -591,8 +595,8 @@ trait GenerationInteraction: Send + Sync {
     async fn delete(&self, http: &Http) -> anyhow::Result<()>;
     fn channel_id(&self) -> ChannelId;
     fn message(&self) -> Option<&Message>;
+    fn user(&self) -> &User;
 }
-
 macro_rules! implement_interaction {
     ($name:ident) => {
         #[async_trait]
@@ -617,6 +621,9 @@ macro_rules! implement_interaction {
             }
             fn channel_id(&self) -> ChannelId {
                 self.channel_id
+            }
+            fn user(&self) -> &User {
+                &self.user
             }
             interaction_message!($name);
         }
