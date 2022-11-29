@@ -469,11 +469,13 @@ impl EventHandler for Handler {
         };
         if let Some(channel_id) = channel_id {
             let http = &ctx.http;
-            if let Err(err) = result {
+            if let Err(err) = result.as_ref() {
                 channel_id
                     .send_message(http, |r| r.content(format!("Error: {err:?}")))
                     .await
                     .ok();
+
+                result.unwrap();
             }
         }
     }
@@ -645,9 +647,7 @@ macro_rules! implement_interaction {
                     .create_interaction_response(http, |response| {
                         response
                             .kind(InteractionResponseType::ChannelMessageWithSource)
-                            .interaction_response_data(|message| {
-                                message.content("Generating...").ephemeral(true)
-                            })
+                            .interaction_response_data(|message| message.content("Generating..."))
                     })
                     .await?)
             }
