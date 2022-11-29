@@ -160,7 +160,7 @@ impl Handler {
         self.retry_impl(http, mci, id, None, None, Some(None)).await
     }
 
-    async fn retry_with_prompt(
+    async fn retry_with_options(
         &self,
         http: &Http,
         mci: &MessageComponentInteraction,
@@ -207,7 +207,7 @@ impl Handler {
                         })
                     })
                     .title("Retry with prompt")
-                    .custom_id(format!("{id}#retry_with_prompt_response"))
+                    .custom_id(format!("{id}#retry_with_options_response"))
                 })
         })
         .await?;
@@ -215,7 +215,7 @@ impl Handler {
         Ok(())
     }
 
-    async fn retry_with_prompt_response(
+    async fn retry_with_options_response(
         &self,
         http: &Http,
         msi: &ModalSubmitInteraction,
@@ -444,7 +444,7 @@ impl EventHandler for Handler {
 
                 match int_cmd {
                     "retry" => self.retry(&ctx.http, &cmp, id).await,
-                    "retry_with_prompt" => self.retry_with_prompt(&ctx.http, &cmp, id).await,
+                    "retry_with_options" => self.retry_with_options(&ctx.http, &cmp, id).await,
                     _ => Ok(()),
                 }
             }
@@ -458,8 +458,8 @@ impl EventHandler for Handler {
                     .expect("invalid interaction id");
 
                 match int_cmd {
-                    "retry_with_prompt_response" => {
-                        self.retry_with_prompt_response(&ctx.http, &msi, id).await
+                    "retry_with_options_response" => {
+                        self.retry_with_options_response(&ctx.http, &msi, id).await
                     }
 
                     _ => Ok(()),
@@ -562,15 +562,15 @@ async fn issue_generation_task(
                     c.create_action_row(|r| {
                         r.create_button(|b| {
                             b.emoji("🔃".parse::<ReactionType>().unwrap())
-                                .label("Retry (new seed)")
+                                .label("Retry")
                                 .style(component::ButtonStyle::Secondary)
                                 .custom_id(format!("{store_key}#retry"))
                         })
                         .create_button(|b| {
                             b.emoji("↪️".parse::<ReactionType>().unwrap())
-                                .label("Retry (same seed, different prompt)")
+                                .label("Retry with options")
                                 .style(component::ButtonStyle::Secondary)
-                                .custom_id(format!("{store_key}#retry_with_prompt"))
+                                .custom_id(format!("{store_key}#retry_with_options"))
                         })
                     })
                 });
