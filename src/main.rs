@@ -138,18 +138,25 @@ impl Handler {
             &sd::GenerationRequest {
                 prompt: prompt.as_str(),
                 negative_prompt: negative_prompt.as_deref(),
-                seed: util::value_to_int(util::get_value(&aci, "seed")),
+                seed: util::get_value(&aci, "seed").and_then(util::value_to_int),
                 batch_size: Some(1),
-                batch_count: util::value_to_int(util::get_value(&aci, "count")).map(|v| v as u32),
-                width: util::value_to_int(util::get_value(&aci, "width"))
+                batch_count: util::get_value(&aci, "count")
+                    .and_then(util::value_to_int)
+                    .map(|v| v as u32),
+                width: util::get_value(&aci, "width")
+                    .and_then(util::value_to_int)
                     .map(|v| v as u32 / 64 * 64),
-                height: util::value_to_int(util::get_value(&aci, "height"))
+                height: util::get_value(&aci, "height")
+                    .and_then(util::value_to_int)
                     .map(|v| v as u32 / 64 * 64),
-                cfg_scale: util::value_to_number(util::get_value(&aci, "guidance"))
+                cfg_scale: util::get_value(&aci, "guidance")
+                    .and_then(util::value_to_number)
                     .map(|v| v as f32),
-                steps: util::value_to_int(util::get_value(&aci, "steps")).map(|v| v as u32),
-                tiling: util::value_to_bool(util::get_value(&aci, "tiling")),
-                restore_faces: util::value_to_bool(util::get_value(&aci, "restore_faces")),
+                steps: util::get_value(&aci, "steps")
+                    .and_then(util::value_to_int)
+                    .map(|v| v as u32),
+                tiling: util::get_value(&aci, "tiling").and_then(util::value_to_bool),
+                restore_faces: util::get_value(&aci, "restore_faces").and_then(util::value_to_bool),
                 sampler: util::get_value(&aci, "sampler")
                     .and_then(util::value_to_string)
                     .and_then(|v| sd::Sampler::try_from(v.as_str()).ok()),

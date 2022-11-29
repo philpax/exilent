@@ -26,15 +26,15 @@ pub fn get_values_starting_with<'a>(
         .flat_map(|v| v.resolved.as_ref())
 }
 
-pub fn value_to_int(v: Option<&CommandDataOptionValue>) -> Option<i64> {
-    match v? {
+pub fn value_to_int(v: &CommandDataOptionValue) -> Option<i64> {
+    match v {
         CommandDataOptionValue::Integer(v) => Some(*v),
         _ => None,
     }
 }
 
-pub fn value_to_number(v: Option<&CommandDataOptionValue>) -> Option<f64> {
-    match v? {
+pub fn value_to_number(v: &CommandDataOptionValue) -> Option<f64> {
+    match v {
         CommandDataOptionValue::Number(v) => Some(*v),
         _ => None,
     }
@@ -47,8 +47,8 @@ pub fn value_to_string(v: &CommandDataOptionValue) -> Option<String> {
     }
 }
 
-pub fn value_to_bool(v: Option<&CommandDataOptionValue>) -> Option<bool> {
-    match v? {
+pub fn value_to_bool(v: &CommandDataOptionValue) -> Option<bool> {
+    match v {
         CommandDataOptionValue::Boolean(v) => Some(*v),
         _ => None,
     }
