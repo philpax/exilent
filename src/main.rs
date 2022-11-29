@@ -116,9 +116,18 @@ impl Handler {
         })
         .await?;
 
-        let prompt =
-            util::value_to_string(util::get_value(&aci, "prompt")).context("expected prompt")?;
-        let negative_prompt = util::value_to_string(util::get_value(&aci, "negative_prompt"));
+        let prompt = util::get_value(&aci, "prompt")
+            .and_then(util::value_to_string)
+            .context("expected prompt")?;
+        let negative_prompt =
+            util::get_value(&aci, "negative_prompt").and_then(util::value_to_string);
+
+        let models: Vec<_> = util::get_values_starting_with(&aci, "model")
+            .flat_map(util::value_to_string)
+            .collect();
+        if models.len() > 1 {
+            anyhow::bail!("more than one model specified: {:?}", models);
+        }
 
         issue_generation_task(
             &self.client,
@@ -141,10 +150,12 @@ impl Handler {
                 steps: util::value_to_int(util::get_value(&aci, "steps")).map(|v| v as u32),
                 tiling: util::value_to_bool(util::get_value(&aci, "tiling")),
                 restore_faces: util::value_to_bool(util::get_value(&aci, "restore_faces")),
-                sampler: util::value_to_string(util::get_value(&aci, "sampler"))
+                sampler: util::get_value(&aci, "sampler")
+                    .and_then(util::value_to_string)
                     .and_then(|v| sd::Sampler::try_from(v.as_str()).ok()),
-                model: util::value_to_string(util::get_value(&aci, "model"))
-                    .and_then(|v| self.models.iter().find(|m| m.title == v)),
+                model: models
+                    .first()
+                    .and_then(|v| self.models.iter().find(|m| m.title == *v)),
                 ..Default::default()
             },
         )
@@ -389,20 +400,29 @@ impl EventHandler for Handler {
                     }
 
                     opt
-                })
-                .create_option(|option| {
+                });
+
+            for (idx, chunk) in self.models.chunks(25).enumerate() {
+                command.create_option(|option| {
                     let opt = option
-                        .name("model")
-                        .description("The model to use")
+                        .name(if idx == 0 {
+                            "model".to_string()
+                        } else {
+                            format!("model{}", idx + 1)
+                        })
+                        .description(format!("The model to use, category {}", idx + 1))
                         .kind(CommandOptionType::String)
                         .required(false);
 
-                    for model in &self.models {
+                    for model in chunk {
                         opt.add_string_choice(&model.name, &model.title);
                     }
 
                     opt
-                })
+                });
+            }
+
+            command
         })
         .await
         .unwrap();

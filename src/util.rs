@@ -15,6 +15,17 @@ pub fn get_value<'a>(
         .and_then(|v| v.resolved.as_ref())
 }
 
+pub fn get_values_starting_with<'a>(
+    cmd: &'a ApplicationCommandInteraction,
+    name: &'a str,
+) -> impl Iterator<Item = &'a CommandDataOptionValue> {
+    cmd.data
+        .options
+        .iter()
+        .filter(move |v| v.name.starts_with(name))
+        .flat_map(|v| v.resolved.as_ref())
+}
+
 pub fn value_to_int(v: Option<&CommandDataOptionValue>) -> Option<i64> {
     match v? {
         CommandDataOptionValue::Integer(v) => Some(*v),
@@ -29,8 +40,8 @@ pub fn value_to_number(v: Option<&CommandDataOptionValue>) -> Option<f64> {
     }
 }
 
-pub fn value_to_string(v: Option<&CommandDataOptionValue>) -> Option<String> {
-    match v? {
+pub fn value_to_string(v: &CommandDataOptionValue) -> Option<String> {
+    match v {
         CommandDataOptionValue::String(v) => Some(v.clone()),
         _ => None,
     }
