@@ -496,14 +496,15 @@ async fn issue_generation_task(
         let progress = task.progress().await?;
 
         interaction
-            .edit(
-                http,
-                &format!(
+            .get_interaction_message(http)
+            .await?
+            .edit(http, |m| {
+                m.content(format!(
                     "{:.02}% complete. ({:.02} seconds remaining)",
                     progress.progress_factor * 100.0,
                     progress.eta_seconds
-                ),
-            )
+                ))
+            })
             .await?;
         if progress.is_finished() {
             break;
@@ -529,7 +530,11 @@ async fn issue_generation_task(
     for (idx, ((filename, bytes), seed)) in images.iter().zip(result.info.seeds.iter()).enumerate()
     {
         interaction
-            .edit(http, &format!("Uploading {}/{}...", idx + 1, images.len()))
+            .get_interaction_message(http)
+            .await?
+            .edit(http, |m| {
+                m.content(format!("Uploading {}/{}...", idx + 1, images.len()))
+            })
             .await?;
 
         let generation = store::Generation {
@@ -583,7 +588,11 @@ async fn issue_generation_task(
             })
             .await?;
     }
-    interaction.delete(http).await?;
+    interaction
+        .get_interaction_message(http)
+        .await?
+        .delete(http)
+        .await?;
 
     Ok(())
 }
@@ -591,8 +600,8 @@ async fn issue_generation_task(
 #[async_trait]
 trait GenerationInteraction: Send + Sync {
     async fn create(&self, http: &Http) -> anyhow::Result<()>;
-    async fn edit(&self, http: &Http, msg: &str) -> anyhow::Result<()>;
-    async fn delete(&self, http: &Http) -> anyhow::Result<()>;
+    async fn get_interaction_message(&self, http: &Http) -> anyhow::Result<Message>;
+
     fn channel_id(&self) -> ChannelId;
     fn message(&self) -> Option<&Message>;
     fn user(&self) -> &User;
@@ -610,15 +619,10 @@ macro_rules! implement_interaction {
                     })
                     .await?)
             }
-            async fn edit(&self, http: &Http, msg: &str) -> anyhow::Result<()> {
-                Ok(self
-                    .edit_original_interaction_response(http, |r| r.content(msg))
-                    .await
-                    .map(|_| ())?)
+            async fn get_interaction_message(&self, http: &Http) -> anyhow::Result<Message> {
+                Ok(self.get_interaction_response(http).await?)
             }
-            async fn delete(&self, http: &Http) -> anyhow::Result<()> {
-                Ok(self.delete_original_interaction_response(http).await?)
-            }
+
             fn channel_id(&self) -> ChannelId {
                 self.channel_id
             }
