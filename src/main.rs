@@ -487,6 +487,8 @@ async fn issue_generation_task(
     interaction: &dyn GenerationInteraction,
     request: &sd::GenerationRequest<'_>,
 ) -> anyhow::Result<()> {
+    const PROGRESS_SCALE_FACTOR: u32 = 2;
+
     let prompt = request.prompt;
     let negative_prompt = request.negative_prompt;
 
@@ -494,6 +496,17 @@ async fn issue_generation_task(
     let task = client.generate_image_from_text(&request)?;
     loop {
         let progress = task.progress().await?;
+        let image_bytes = progress
+            .current_image
+            .as_ref()
+            .map(|i| {
+                encode_image_for_attachment(i.resize(
+                    i.width() / PROGRESS_SCALE_FACTOR,
+                    i.height() / PROGRESS_SCALE_FACTOR,
+                    image::imageops::FilterType::Nearest,
+                ))
+            })
+            .transpose()?;
 
         interaction
             .get_interaction_message(http)
@@ -503,9 +516,19 @@ async fn issue_generation_task(
                     "{:.02}% complete. ({:.02} seconds remaining)",
                     progress.progress_factor * 100.0,
                     progress.eta_seconds
-                ))
+                ));
+
+                if let Some(image_bytes) = &image_bytes {
+                    if let Some(a) = m.0.get_mut("attachments").and_then(|e| e.as_array_mut()) {
+                        a.clear();
+                    }
+                    m.attachment((image_bytes.as_slice(), "progress.png"));
+                }
+
+                m
             })
             .await?;
+
         if progress.is_finished() {
             break;
         }
@@ -519,10 +542,10 @@ async fn issue_generation_task(
         .into_iter()
         .enumerate()
         .map(|(idx, image)| {
-            let mut bytes: Vec<u8> = Vec::new();
-            let mut cursor = Cursor::new(&mut bytes);
-            image.write_to(&mut cursor, image::ImageOutputFormat::Png)?;
-            Ok((format!("image_{idx}.png"), bytes))
+            Ok((
+                format!("image_{idx}.png"),
+                encode_image_for_attachment(image)?,
+            ))
         })
         .collect::<anyhow::Result<Vec<_>>>()?;
 
@@ -597,6 +620,13 @@ async fn issue_generation_task(
     Ok(())
 }
 
+fn encode_image_for_attachment(image: image::DynamicImage) -> anyhow::Result<Vec<u8>> {
+    let mut bytes: Vec<u8> = Vec::new();
+    let mut cursor = Cursor::new(&mut bytes);
+    image.write_to(&mut cursor, image::ImageOutputFormat::Png)?;
+    Ok(bytes)
+}
+
 #[async_trait]
 trait GenerationInteraction: Send + Sync {
     async fn create(&self, http: &Http) -> anyhow::Result<()>;
@@ -615,7 +645,9 @@ macro_rules! implement_interaction {
                     .create_interaction_response(http, |response| {
                         response
                             .kind(InteractionResponseType::ChannelMessageWithSource)
-                            .interaction_response_data(|message| message.content("Generating..."))
+                            .interaction_response_data(|message| {
+                                message.content("Generating...").ephemeral(true)
+                            })
                     })
                     .await?)
             }
