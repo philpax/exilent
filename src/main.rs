@@ -111,7 +111,6 @@ impl Handler {
 
     async fn paint(&self, http: &Http, aci: ApplicationCommandInteraction) -> anyhow::Result<()> {
         let interaction: &dyn DiscordInteraction = &aci;
-        interaction.create(http, "Generating...").await?;
 
         let prompt = util::get_value(&aci, "prompt")
             .and_then(util::value_to_string)
@@ -125,6 +124,19 @@ impl Handler {
         if models.len() > 1 {
             anyhow::bail!("more than one model specified: {:?}", models);
         }
+        interaction
+            .create(
+                http,
+                &format!(
+                    "`{}`{}: Generating...",
+                    &prompt,
+                    negative_prompt
+                        .as_deref()
+                        .map(|s| format!(" - `{s}`"))
+                        .unwrap_or_default()
+                ),
+            )
+            .await?;
 
         issue_generation_task(
             &self.client,
@@ -304,8 +316,6 @@ impl Handler {
         // None: don't override; Some(None): override with a fresh seed; Some(Some(seed)): override with seed
         seed: Option<Option<i64>>,
     ) -> anyhow::Result<()> {
-        interaction.create(http, "Generating retry...").await?;
-
         let generation = self
             .store
             .lock()
@@ -314,16 +324,29 @@ impl Handler {
             .context("id not found in store")?
             .clone();
 
-        let mut generation_request = generation.as_generation_request(&self.models);
+        let mut request = generation.as_generation_request(&self.models);
         if let Some(prompt) = prompt {
-            generation_request.prompt = prompt;
+            request.prompt = prompt;
         }
         if let Some(negative_prompt) = negative_prompt {
-            generation_request.negative_prompt = Some(negative_prompt);
+            request.negative_prompt = Some(negative_prompt);
         }
         if let Some(seed) = seed {
-            generation_request.seed = seed;
+            request.seed = seed;
         }
+        interaction
+            .create(
+                http,
+                &format!(
+                    "`{}`{}: Generating retry...",
+                    request.prompt,
+                    request
+                        .negative_prompt
+                        .map(|s| format!(" - `{s}`"))
+                        .unwrap_or_default()
+                ),
+            )
+            .await?;
 
         issue_generation_task(
             &self.client,
@@ -331,7 +354,7 @@ impl Handler {
             self.store.clone(),
             http,
             interaction,
-            &generation_request,
+            &request,
         )
         .await?;
 
@@ -635,7 +658,12 @@ async fn issue_generation_task(
             .await?
             .edit(http, |m| {
                 m.content(format!(
-                    "{:.02}% complete. ({:.02} seconds remaining)",
+                    "`{}`{}: {:.02}% complete. ({:.02} seconds remaining)",
+                    request.prompt,
+                    request
+                        .negative_prompt
+                        .map(|s| format!(" - `{s}`"))
+                        .unwrap_or_default(),
                     progress.progress_factor * 100.0,
                     progress.eta_seconds
                 ));
@@ -678,7 +706,16 @@ async fn issue_generation_task(
             .get_interaction_message(http)
             .await?
             .edit(http, |m| {
-                m.content(format!("Uploading {}/{}...", idx + 1, images.len()))
+                m.content(format!(
+                    "`{}`{}: Uploading {}/{}...",
+                    request.prompt,
+                    request
+                        .negative_prompt
+                        .map(|s| format!(" - `{s}`"))
+                        .unwrap_or_default(),
+                    idx + 1,
+                    images.len()
+                ))
             })
             .await?;
 
