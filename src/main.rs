@@ -81,6 +81,7 @@ struct Handler {
     models: Vec<sd::Model>,
     store: Arc<Mutex<Store>>,
 }
+/// Commands
 impl Handler {
     async fn exilent(&self, http: &Http, cmd: ApplicationCommandInteraction) -> anyhow::Result<()> {
         let channel = cmd.channel_id;
@@ -197,17 +198,20 @@ impl Handler {
         )
         .await
     }
-
-    async fn retry(
+}
+/// Message component interactions
+impl Handler {
+    async fn mc_retry(
         &self,
         http: &Http,
         mci: &MessageComponentInteraction,
         id: &str,
     ) -> anyhow::Result<()> {
-        self.retry_impl(http, mci, id, None, None, Some(None)).await
+        self.mc_retry_impl(http, mci, id, None, None, Some(None))
+            .await
     }
 
-    async fn retry_with_options(
+    async fn mc_retry_with_options(
         &self,
         http: &Http,
         mci: &MessageComponentInteraction,
@@ -262,7 +266,7 @@ impl Handler {
         Ok(())
     }
 
-    async fn retry_with_options_response(
+    async fn mc_retry_with_options_response(
         &self,
         http: &Http,
         msi: &ModalSubmitInteraction,
@@ -286,11 +290,11 @@ impl Handler {
         let negative_prompt = rows.get("negative_prompt").map(|s| s.as_str());
         let seed = rows.get("seed").map(|s| s.parse::<i64>().ok());
 
-        self.retry_impl(http, msi, id, prompt, negative_prompt, seed)
+        self.mc_retry_impl(http, msi, id, prompt, negative_prompt, seed)
             .await
     }
 
-    async fn retry_impl(
+    async fn mc_retry_impl(
         &self,
         http: &Http,
         interaction: &dyn DiscordInteraction,
@@ -332,6 +336,28 @@ impl Handler {
         .await?;
 
         Ok(())
+    }
+
+    async fn mc_interrogate(
+        &self,
+        http: &Http,
+        interaction: &dyn DiscordInteraction,
+        id: &str,
+        interrogator: sd::Interrogator,
+    ) -> anyhow::Result<()> {
+        interaction.create(http, "Interrogating...").await?;
+
+        let image = image::load_from_memory(
+            &self
+                .store
+                .lock()
+                .unwrap()
+                .get(id)
+                .context("id not found in store")?
+                .image_bytes,
+        )?;
+
+        issue_interrogate_task(&self.client, interaction, http, image, None, interrogator).await
     }
 }
 
@@ -528,8 +554,16 @@ impl EventHandler for Handler {
                     .expect("invalid interaction id");
 
                 match int_cmd {
-                    "retry" => self.retry(&ctx.http, &cmp, id).await,
-                    "retry_with_options" => self.retry_with_options(&ctx.http, &cmp, id).await,
+                    "retry" => self.mc_retry(&ctx.http, &cmp, id).await,
+                    "retry_with_options" => self.mc_retry_with_options(&ctx.http, &cmp, id).await,
+                    "interrogate_clip" => {
+                        self.mc_interrogate(&ctx.http, &cmp, id, sd::Interrogator::Clip)
+                            .await
+                    }
+                    "interrogate_dd" => {
+                        self.mc_interrogate(&ctx.http, &cmp, id, sd::Interrogator::DeepDanbooru)
+                            .await
+                    }
                     _ => Ok(()),
                 }
             }
@@ -544,7 +578,8 @@ impl EventHandler for Handler {
 
                 match int_cmd {
                     "retry_with_options_response" => {
-                        self.retry_with_options_response(&ctx.http, &msi, id).await
+                        self.mc_retry_with_options_response(&ctx.http, &msi, id)
+                            .await
                     }
 
                     _ => Ok(()),
@@ -686,6 +721,20 @@ async fn issue_generation_task(
                                 .label("Retry with options")
                                 .style(component::ButtonStyle::Secondary)
                                 .custom_id(format!("{store_key}#retry_with_options"))
+                        })
+                    })
+                    .create_action_row(|r| {
+                        r.create_button(|b| {
+                            b.emoji("📋".parse::<ReactionType>().unwrap())
+                                .label("CLIP")
+                                .style(component::ButtonStyle::Secondary)
+                                .custom_id(format!("{store_key}#interrogate_clip"))
+                        })
+                        .create_button(|b| {
+                            b.emoji("🧊".parse::<ReactionType>().unwrap())
+                                .label("DeepDanbooru")
+                                .style(component::ButtonStyle::Secondary)
+                                .custom_id(format!("{store_key}#interrogate_dd"))
                         })
                     })
                 });
