@@ -109,12 +109,8 @@ impl Handler {
     }
 
     async fn paint(&self, http: &Http, aci: ApplicationCommandInteraction) -> anyhow::Result<()> {
-        aci.create_interaction_response(http, |response| {
-            response
-                .kind(InteractionResponseType::ChannelMessageWithSource)
-                .interaction_response_data(|message| message.content("Generating..."))
-        })
-        .await?;
+        let interaction: &dyn DiscordInteraction = &aci;
+        interaction.create(http, "Generating...").await?;
 
         let prompt = util::get_value(&aci, "prompt")
             .and_then(util::value_to_string)
@@ -134,7 +130,7 @@ impl Handler {
             &self.models,
             self.store.clone(),
             http,
-            &aci,
+            interaction,
             &sd::GenerationRequest {
                 prompt: prompt.as_str(),
                 negative_prompt: negative_prompt.as_deref(),
@@ -174,13 +170,6 @@ impl Handler {
         http: &Http,
         aci: ApplicationCommandInteraction,
     ) -> anyhow::Result<()> {
-        aci.create_interaction_response(http, |response| {
-            response
-                .kind(InteractionResponseType::ChannelMessageWithSource)
-                .interaction_response_data(|message| message.content("Interrogating..."))
-        })
-        .await?;
-
         let image_url = util::get_value(&aci, "image_url")
             .and_then(util::value_to_string)
             .context("expected image_url")?;
@@ -190,23 +179,23 @@ impl Handler {
             .and_then(|v| sd::Interrogator::try_from(v.as_str()).ok())
             .context("expected interrogator")?;
 
+        let interaction: &dyn DiscordInteraction = &aci;
+        interaction
+            .create(http, &format!("Interrogating {image_url}"))
+            .await?;
+
         let bytes = reqwest::get(&image_url).await?.bytes().await?;
         let image = image::load_from_memory(&bytes)?;
 
-        let result = self.client.interrogate(&image, interrogator).await?;
-
-        aci.edit_original_interaction_response(http, |r| {
-            r.content(format!(
-                "`{}` - {} on {} for {}",
-                result,
-                interrogator.to_string(),
-                image_url,
-                aci.user.mention()
-            ))
-        })
-        .await?;
-
-        Ok(())
+        issue_interrogate_task(
+            &self.client,
+            interaction,
+            http,
+            image,
+            Some(&image_url),
+            interrogator,
+        )
+        .await
     }
 
     async fn retry(
@@ -304,14 +293,14 @@ impl Handler {
     async fn retry_impl(
         &self,
         http: &Http,
-        interaction: &dyn GenerationInteraction,
+        interaction: &dyn DiscordInteraction,
         id: &str,
         prompt: Option<&str>,
         negative_prompt: Option<&str>,
         // None: don't override; Some(None): override with a fresh seed; Some(Some(seed)): override with seed
         seed: Option<Option<i64>>,
     ) -> anyhow::Result<()> {
-        interaction.create(http).await?;
+        interaction.create(http, "Generating retry...").await?;
 
         let generation = self
             .store
@@ -582,7 +571,7 @@ async fn issue_generation_task(
     models: &[sd::Model],
     store: Arc<Mutex<Store>>,
     http: &Http,
-    interaction: &dyn GenerationInteraction,
+    interaction: &dyn DiscordInteraction,
     request: &sd::GenerationRequest<'_>,
 ) -> anyhow::Result<()> {
     const PROGRESS_SCALE_FACTOR: u32 = 2;
@@ -718,6 +707,32 @@ async fn issue_generation_task(
     Ok(())
 }
 
+async fn issue_interrogate_task(
+    client: &sd::Client,
+    interaction: &dyn DiscordInteraction,
+    http: &Http,
+    image: image::DynamicImage,
+    image_url: Option<&str>,
+    interrogator: sd::Interrogator,
+) -> Result<(), anyhow::Error> {
+    let result = client.interrogate(&image, interrogator).await?;
+    interaction
+        .get_interaction_message(http)
+        .await?
+        .edit(http, |r| {
+            r.content(format!(
+                "`{}` - {}{} for {}",
+                result,
+                interrogator.to_string(),
+                image_url.map(|s| format!(" on {s}")).unwrap_or_default(),
+                interaction.user().mention()
+            ))
+        })
+        .await?;
+
+    Ok(())
+}
+
 fn encode_image_for_attachment(image: image::DynamicImage) -> anyhow::Result<Vec<u8>> {
     let mut bytes: Vec<u8> = Vec::new();
     let mut cursor = Cursor::new(&mut bytes);
@@ -726,8 +741,8 @@ fn encode_image_for_attachment(image: image::DynamicImage) -> anyhow::Result<Vec
 }
 
 #[async_trait]
-trait GenerationInteraction: Send + Sync {
-    async fn create(&self, http: &Http) -> anyhow::Result<()>;
+trait DiscordInteraction: Send + Sync {
+    async fn create(&self, http: &Http, message: &str) -> anyhow::Result<()>;
     async fn get_interaction_message(&self, http: &Http) -> anyhow::Result<Message>;
 
     fn channel_id(&self) -> ChannelId;
@@ -737,13 +752,13 @@ trait GenerationInteraction: Send + Sync {
 macro_rules! implement_interaction {
     ($name:ident) => {
         #[async_trait]
-        impl GenerationInteraction for $name {
-            async fn create(&self, http: &Http) -> anyhow::Result<()> {
+        impl DiscordInteraction for $name {
+            async fn create(&self, http: &Http, msg: &str) -> anyhow::Result<()> {
                 Ok(self
                     .create_interaction_response(http, |response| {
                         response
                             .kind(InteractionResponseType::ChannelMessageWithSource)
-                            .interaction_response_data(|message| message.content("Generating..."))
+                            .interaction_response_data(|message| message.content(msg))
                     })
                     .await?)
             }
