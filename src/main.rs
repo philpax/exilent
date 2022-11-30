@@ -169,6 +169,46 @@ impl Handler {
         .await
     }
 
+    async fn interrogate(
+        &self,
+        http: &Http,
+        aci: ApplicationCommandInteraction,
+    ) -> anyhow::Result<()> {
+        aci.create_interaction_response(http, |response| {
+            response
+                .kind(InteractionResponseType::ChannelMessageWithSource)
+                .interaction_response_data(|message| message.content("Interrogating..."))
+        })
+        .await?;
+
+        let image_url = util::get_value(&aci, "image_url")
+            .and_then(util::value_to_string)
+            .context("expected image_url")?;
+
+        let interrogator = util::get_value(&aci, "interrogator")
+            .and_then(util::value_to_string)
+            .and_then(|v| sd::Interrogator::try_from(v.as_str()).ok())
+            .context("expected interrogator")?;
+
+        let bytes = reqwest::get(&image_url).await?.bytes().await?;
+        let image = image::load_from_memory(&bytes)?;
+
+        let result = self.client.interrogate(&image, interrogator).await?;
+
+        aci.edit_original_interaction_response(http, |r| {
+            r.content(format!(
+                "`{}` - {} on {} for {}",
+                result,
+                interrogator.to_string(),
+                image_url,
+                aci.user.mention()
+            ))
+        })
+        .await?;
+
+        Ok(())
+    }
+
     async fn retry(
         &self,
         http: &Http,
@@ -436,6 +476,34 @@ impl EventHandler for Handler {
 
         Command::create_global_application_command(&ctx.http, |command| {
             command
+                .name("interrogate")
+                .description("Interrogates an image to produce a caption")
+                .create_option(|option| {
+                    option
+                        .name("image_url")
+                        .description("The URL of the image to interrogate")
+                        .kind(CommandOptionType::String)
+                        .required(true)
+                })
+                .create_option(|option| {
+                    let opt = option
+                        .name("interrogator")
+                        .description("The interrogator to use")
+                        .kind(CommandOptionType::String)
+                        .required(true);
+
+                    for value in sd::Interrogator::VALUES {
+                        opt.add_string_choice(value.to_string(), value.to_string());
+                    }
+
+                    opt
+                })
+        })
+        .await
+        .unwrap();
+
+        Command::create_global_application_command(&ctx.http, |command| {
+            command
                 .name("exilent")
                 .description("Meta-commands for Exilent")
                 .create_option(|option| {
@@ -456,6 +524,7 @@ impl EventHandler for Handler {
                 channel_id = Some(cmd.channel_id);
                 match cmd.data.name.as_str() {
                     "paint" => self.paint(&ctx.http, cmd).await,
+                    "interrogate" => self.interrogate(&ctx.http, cmd).await,
                     "exilent" => self.exilent(&ctx.http, cmd).await,
                     _ => Ok(()),
                 }

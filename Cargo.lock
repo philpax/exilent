@@ -353,6 +353,7 @@ dependencies = [
  "dotenv",
  "image",
  "nanoid",
+ "reqwest",
  "serde",
  "serde_json",
  "serenity",
@@ -1512,7 +1513,7 @@ dependencies = [
 [[package]]
 name = "stable-diffusion-a1111-webui-client"
 version = "0.1.0"
-source = "git+https://github.com/philpax/stable-diffusion-a1111-webui-client.git#8ba9dbc6e710b9fe226459fffae5fdaa5efe4613"
+source = "git+https://github.com/philpax/stable-diffusion-a1111-webui-client.git#311618795227a87ab0fb818d36e6ecb669f6425f"
 dependencies = [
  "base64",
  "chrono",
