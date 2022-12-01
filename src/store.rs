@@ -143,6 +143,13 @@ impl Store {
         self.get_generation_with_predicate(r"id = ?", [key])
     }
 
+    pub fn get_last_generation_for_user(
+        &self,
+        user_id: UserId,
+    ) -> anyhow::Result<Option<Generation>> {
+        self.get_generation_with_predicate(r"user_id = ?", [user_id.as_u64().to_string()])
+    }
+
     fn get_generation_with_predicate(
         &self,
         predicate: &str,

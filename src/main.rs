@@ -114,18 +114,78 @@ impl Handler {
     async fn paint(&self, http: &Http, aci: ApplicationCommandInteraction) -> anyhow::Result<()> {
         let interaction: &dyn DiscordInteraction = &aci;
 
+        // always applied
         let prompt = util::get_value(&aci, "prompt")
             .and_then(util::value_to_string)
             .context("expected prompt")?;
+
         let negative_prompt =
             util::get_value(&aci, "negative_prompt").and_then(util::value_to_string);
 
-        let models: Vec<_> = util::get_values_starting_with(&aci, "model")
-            .flat_map(util::value_to_string)
-            .collect();
-        if models.len() > 1 {
-            anyhow::bail!("more than one model specified: {:?}", models);
-        }
+        let seed = util::get_value(&aci, "seed").and_then(util::value_to_int);
+
+        let batch_count = util::get_value(&aci, "count")
+            .and_then(util::value_to_int)
+            .map(|v| v as u32);
+
+        // use last generation as default if available
+        let last_generation = self
+            .store
+            .lock()
+            .unwrap()
+            .get_last_generation_for_user(aci.user.id)?;
+        let last_generation = last_generation.as_ref();
+
+        let width = util::get_value(&aci, "width")
+            .and_then(util::value_to_int)
+            .map(|v| v as u32 / 64 * 64)
+            .or(last_generation.map(|g| g.width));
+
+        let height = util::get_value(&aci, "height")
+            .and_then(util::value_to_int)
+            .map(|v| v as u32 / 64 * 64)
+            .or(last_generation.map(|g| g.height));
+
+        let cfg_scale = util::get_value(&aci, "guidance_scale")
+            .and_then(util::value_to_number)
+            .map(|v| v as f32)
+            .or(last_generation.map(|g| g.cfg_scale));
+
+        let steps = util::get_value(&aci, "steps")
+            .and_then(util::value_to_int)
+            .map(|v| v as u32)
+            .or(last_generation.map(|g| g.steps));
+
+        let tiling = util::get_value(&aci, "tiling")
+            .and_then(util::value_to_bool)
+            .or(last_generation.map(|g| g.tiling));
+
+        let restore_faces = util::get_value(&aci, "restore_faces")
+            .and_then(util::value_to_bool)
+            .or(last_generation.map(|g| g.restore_faces));
+
+        let sampler = util::get_value(&aci, "sampler")
+            .and_then(util::value_to_string)
+            .and_then(|v| sd::Sampler::try_from(v.as_str()).ok())
+            .or(last_generation.map(|g| g.sampler));
+
+        let model = {
+            let models: Vec<_> = util::get_values_starting_with(&aci, "model")
+                .flat_map(util::value_to_string)
+                .collect();
+            if models.len() > 1 {
+                anyhow::bail!("more than one model specified: {:?}", models);
+            }
+
+            models
+                .first()
+                .and_then(|v| self.models.iter().find(|m| m.title == *v))
+                .or_else(|| {
+                    last_generation
+                        .and_then(|g| util::find_model_by_hash(&self.models, &g.model_hash))
+                })
+        };
+
         interaction
             .create(
                 http,
@@ -149,31 +209,17 @@ impl Handler {
             &sd::GenerationRequest {
                 prompt: prompt.as_str(),
                 negative_prompt: negative_prompt.as_deref(),
-                seed: util::get_value(&aci, "seed").and_then(util::value_to_int),
+                seed,
                 batch_size: Some(1),
-                batch_count: util::get_value(&aci, "count")
-                    .and_then(util::value_to_int)
-                    .map(|v| v as u32),
-                width: util::get_value(&aci, "width")
-                    .and_then(util::value_to_int)
-                    .map(|v| v as u32 / 64 * 64),
-                height: util::get_value(&aci, "height")
-                    .and_then(util::value_to_int)
-                    .map(|v| v as u32 / 64 * 64),
-                cfg_scale: util::get_value(&aci, "guidance")
-                    .and_then(util::value_to_number)
-                    .map(|v| v as f32),
-                steps: util::get_value(&aci, "steps")
-                    .and_then(util::value_to_int)
-                    .map(|v| v as u32),
-                tiling: util::get_value(&aci, "tiling").and_then(util::value_to_bool),
-                restore_faces: util::get_value(&aci, "restore_faces").and_then(util::value_to_bool),
-                sampler: util::get_value(&aci, "sampler")
-                    .and_then(util::value_to_string)
-                    .and_then(|v| sd::Sampler::try_from(v.as_str()).ok()),
-                model: models
-                    .first()
-                    .and_then(|v| self.models.iter().find(|m| m.title == *v)),
+                batch_count,
+                width,
+                height,
+                cfg_scale,
+                steps,
+                tiling,
+                restore_faces,
+                sampler,
+                model,
                 ..Default::default()
             },
         )
