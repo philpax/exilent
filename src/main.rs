@@ -235,9 +235,9 @@ impl Handler {
             .store
             .lock()
             .unwrap()
-            .get_generation(id)
-            .map(|g| (g.prompt.clone(), g.negative_prompt.clone(), Some(g.seed)))
-            .unwrap_or_default();
+            .get_generation(id)?
+            .map(|g| (g.prompt, g.negative_prompt, g.seed))
+            .context("generation not found")?;
 
         mci.create_interaction_response(http, |r| {
             r.kind(InteractionResponseType::Modal)
@@ -267,7 +267,7 @@ impl Handler {
                                     .custom_id("seed")
                                     .required(false)
                                     .style(InputTextStyle::Short)
-                                    .value(seed.unwrap_or_default())
+                                    .value(seed)
                             })
                         })
                     })
@@ -322,8 +322,8 @@ impl Handler {
             .store
             .lock()
             .unwrap()
-            .get_generation(id)
-            .context("id not found in store")?
+            .get_generation(id)?
+            .context("generation not found")?
             .clone();
 
         let mut request = generation.as_generation_request(&self.models);
@@ -377,8 +377,8 @@ impl Handler {
                 .store
                 .lock()
                 .unwrap()
-                .get_generation(id)
-                .context("id not found in store")?
+                .get_generation(id)?
+                .context("generation not found")?
                 .image,
         )?;
 

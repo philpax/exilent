@@ -1,5 +1,7 @@
 use crate::{sd, util};
 use anyhow::Context;
+use rusqlite::OptionalExtension;
+use serenity::model::id::UserId;
 use stable_diffusion_a1111_webui_client::Sampler;
 
 #[derive(Debug, Clone)]
@@ -17,7 +19,7 @@ pub struct Generation {
     pub model_hash: String,
     pub image: Vec<u8>,
     pub timestamp: chrono::DateTime<chrono::Local>,
-    pub user_id: serenity::model::id::UserId,
+    pub user_id: UserId,
 }
 impl Generation {
     pub fn as_message(&self, models: &[sd::Model]) -> String {
@@ -137,8 +139,16 @@ impl Store {
         Ok(self.0.last_insert_rowid())
     }
 
-    pub fn get_generation(&self, key: i64) -> anyhow::Result<Generation> {
-        let (
+    pub fn get_generation(&self, key: i64) -> anyhow::Result<Option<Generation>> {
+        self.get_generation_with_predicate(r"id = ?", [key])
+    }
+
+    fn get_generation_with_predicate(
+        &self,
+        predicate: &str,
+        params: impl rusqlite::Params,
+    ) -> anyhow::Result<Option<Generation>> {
+        let Some((
             prompt,
             negative_prompt,
             seed,
@@ -153,23 +163,29 @@ impl Store {
             image,
             user_id,
             timestamp,
-        ) = self
+        )) = self
             .0
             .query_row::<(_, _, _, _, _, _, _, _, _, String, _, _, String, _), _, _>(
-                r"
-            SELECT
-                prompt, negative_prompt, seed, width, height, cfg_scale, steps, tiling,
-                restore_faces, sampler, model_hash, image, user_id, timestamp
-            FROM
-                generation
-            WHERE
-                id = ?
-            ",
-                [key],
+                &format!(
+                    r"
+                    SELECT
+                        prompt, negative_prompt, seed, width, height, cfg_scale, steps, tiling,
+                        restore_faces, sampler, model_hash, image, user_id, timestamp
+                    FROM
+                        generation
+                    WHERE
+                        {}
+                    ORDER BY timestamp
+                    DESC LIMIT 1
+                    ",
+                    predicate
+                ),
+                params,
                 |r| r.try_into(),
-            )?;
+            )
+            .optional()? else { return Ok(None); };
 
-        Ok(Generation {
+        Ok(Some(Generation {
             prompt,
             seed,
             width,
@@ -185,7 +201,7 @@ impl Store {
             model_hash,
             image,
             timestamp,
-            user_id: serenity::model::id::UserId(user_id.parse()?),
-        })
+            user_id: UserId(user_id.parse()?),
+        }))
     }
 }
