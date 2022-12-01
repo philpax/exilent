@@ -23,18 +23,47 @@ pub struct Generation {
 }
 impl Generation {
     pub fn as_message(&self, models: &[sd::Model]) -> String {
-        format!("`/paint prompt:{}{} seed:{} count:1 width:{} height:{} guidance_scale:{} steps:{} tiling:{} restore_faces:{} sampler:{} {}`",
+        use crate::consts as c;
+        format!(
+            "`/{} {}:{}{} {}:{} {}:{} {}:{} {}:{} {}:{} {}:{} {}:{} {}:{}{}`",
+            c::command::PAINT,
+            c::value::PROMPT,
             self.prompt,
-            self.negative_prompt.as_ref().map(|s| format!(" negative_prompt:{s}")).unwrap_or_default(),
+            self.negative_prompt
+                .as_ref()
+                .map(|s| format!(" {}:{s}", c::value::NEGATIVE_PROMPT))
+                .unwrap_or_default(),
+            c::value::SEED,
             self.seed,
+            c::value::WIDTH,
             self.width,
+            c::value::HEIGHT,
             self.height,
+            c::value::GUIDANCE_SCALE,
             self.cfg_scale,
+            c::value::STEPS,
             self.steps,
+            c::value::TILING,
             self.tiling,
+            c::value::RESTORE_FACES,
             self.restore_faces,
+            c::value::SAMPLER,
             self.sampler.to_string(),
-            util::find_model_by_hash(models, &self.model_hash).map(|m| format!("model:{}", m.name)).unwrap_or_default()
+            util::find_model_by_hash(models, &self.model_hash)
+                .map(|(idx, m)| {
+                    let model_category = idx / c::misc::MODEL_CHUNK_COUNT;
+                    format!(
+                        " {}{}:{}",
+                        c::value::MODEL,
+                        if model_category == 0 {
+                            String::new()
+                        } else {
+                            (model_category + 1).to_string()
+                        },
+                        m.name
+                    )
+                })
+                .unwrap_or_default()
         )
     }
 
@@ -55,7 +84,7 @@ impl Generation {
             tiling: Some(self.tiling),
             restore_faces: Some(self.restore_faces),
             sampler: Some(self.sampler),
-            model: util::find_model_by_hash(models, &self.model_hash),
+            model: util::find_model_by_hash(models, &self.model_hash).map(|t| t.1),
             ..Default::default()
         }
     }

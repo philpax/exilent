@@ -73,8 +73,11 @@ pub fn generate_chunked_strings(
     texts
 }
 
-pub fn find_model_by_hash<'a>(models: &'a [sd::Model], model_hash: &str) -> Option<&'a sd::Model> {
-    models.iter().find(|m| {
+pub fn find_model_by_hash<'a>(
+    models: &'a [sd::Model],
+    model_hash: &str,
+) -> Option<(usize, &'a sd::Model)> {
+    models.iter().enumerate().find(|(_, m)| {
         let Some(hash_wrapped) = m.title.split_ascii_whitespace().last() else { return false };
         &hash_wrapped[1..hash_wrapped.len() - 1] == model_hash
     })

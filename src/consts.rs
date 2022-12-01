@@ -57,4 +57,7 @@ pub mod misc {
 
     /// time in milliseonds to wait between progress updates
     pub const PROGRESS_UPDATE_MS: u64 = 250;
+
+    /// number of models per category
+    pub const MODEL_CHUNK_COUNT: usize = 25;
 }

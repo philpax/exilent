@@ -182,8 +182,9 @@ impl Handler {
                 .first()
                 .and_then(|v| self.models.iter().find(|m| m.title == *v))
                 .or_else(|| {
-                    last_generation
-                        .and_then(|g| util::find_model_by_hash(&self.models, &g.model_hash))
+                    last_generation.and_then(|g| {
+                        util::find_model_by_hash(&self.models, &g.model_hash).map(|t| t.1)
+                    })
                 })
         };
 
@@ -536,7 +537,11 @@ impl EventHandler for Handler {
                     opt
                 });
 
-            for (idx, chunk) in self.models.chunks(25).enumerate() {
+            for (idx, chunk) in self
+                .models
+                .chunks(consts::misc::MODEL_CHUNK_COUNT)
+                .enumerate()
+            {
                 command.create_option(|option| {
                     let opt = option
                         .name(if idx == 0 {
