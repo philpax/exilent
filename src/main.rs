@@ -27,6 +27,7 @@ use serenity::{
     Client,
 };
 
+mod consts;
 mod custom_id;
 mod store;
 mod util;
@@ -115,16 +116,16 @@ impl Handler {
         let interaction: &dyn DiscordInteraction = &aci;
 
         // always applied
-        let prompt = util::get_value(&aci, "prompt")
+        let prompt = util::get_value(&aci, consts::value::PROMPT)
             .and_then(util::value_to_string)
             .context("expected prompt")?;
 
         let negative_prompt =
-            util::get_value(&aci, "negative_prompt").and_then(util::value_to_string);
+            util::get_value(&aci, consts::value::NEGATIVE_PROMPT).and_then(util::value_to_string);
 
-        let seed = util::get_value(&aci, "seed").and_then(util::value_to_int);
+        let seed = util::get_value(&aci, consts::value::SEED).and_then(util::value_to_int);
 
-        let batch_count = util::get_value(&aci, "count")
+        let batch_count = util::get_value(&aci, consts::value::COUNT)
             .and_then(util::value_to_int)
             .map(|v| v as u32);
 
@@ -136,41 +137,41 @@ impl Handler {
             .get_last_generation_for_user(aci.user.id)?;
         let last_generation = last_generation.as_ref();
 
-        let width = util::get_value(&aci, "width")
+        let width = util::get_value(&aci, consts::value::WIDTH)
             .and_then(util::value_to_int)
             .map(|v| v as u32 / 64 * 64)
             .or(last_generation.map(|g| g.width));
 
-        let height = util::get_value(&aci, "height")
+        let height = util::get_value(&aci, consts::value::HEIGHT)
             .and_then(util::value_to_int)
             .map(|v| v as u32 / 64 * 64)
             .or(last_generation.map(|g| g.height));
 
-        let cfg_scale = util::get_value(&aci, "guidance_scale")
+        let cfg_scale = util::get_value(&aci, consts::value::GUIDANCE_SCALE)
             .and_then(util::value_to_number)
             .map(|v| v as f32)
             .or(last_generation.map(|g| g.cfg_scale));
 
-        let steps = util::get_value(&aci, "steps")
+        let steps = util::get_value(&aci, consts::value::STEPS)
             .and_then(util::value_to_int)
             .map(|v| v as u32)
             .or(last_generation.map(|g| g.steps));
 
-        let tiling = util::get_value(&aci, "tiling")
+        let tiling = util::get_value(&aci, consts::value::TILING)
             .and_then(util::value_to_bool)
             .or(last_generation.map(|g| g.tiling));
 
-        let restore_faces = util::get_value(&aci, "restore_faces")
+        let restore_faces = util::get_value(&aci, consts::value::RESTORE_FACES)
             .and_then(util::value_to_bool)
             .or(last_generation.map(|g| g.restore_faces));
 
-        let sampler = util::get_value(&aci, "sampler")
+        let sampler = util::get_value(&aci, consts::value::SAMPLER)
             .and_then(util::value_to_string)
             .and_then(|v| sd::Sampler::try_from(v.as_str()).ok())
             .or(last_generation.map(|g| g.sampler));
 
         let model = {
-            let models: Vec<_> = util::get_values_starting_with(&aci, "model")
+            let models: Vec<_> = util::get_values_starting_with(&aci, consts::value::MODEL)
                 .flat_map(util::value_to_string)
                 .collect();
             if models.len() > 1 {
@@ -231,11 +232,11 @@ impl Handler {
         http: &Http,
         aci: ApplicationCommandInteraction,
     ) -> anyhow::Result<()> {
-        let image_url = util::get_value(&aci, "image_url")
+        let image_url = util::get_value(&aci, consts::value::IMAGE_URL)
             .and_then(util::value_to_string)
             .context("expected image_url")?;
 
-        let interrogator = util::get_value(&aci, "interrogator")
+        let interrogator = util::get_value(&aci, consts::value::INTERROGATOR)
             .and_then(util::value_to_string)
             .and_then(|v| sd::Interrogator::try_from(v.as_str()).ok())
             .context("expected interrogator")?;
@@ -292,7 +293,7 @@ impl Handler {
                         c.create_action_row(|r| {
                             r.create_input_text(|t| {
                                 t.label("Prompt")
-                                    .custom_id("prompt")
+                                    .custom_id(consts::value::PROMPT)
                                     .required(true)
                                     .style(InputTextStyle::Short)
                                     .value(old_prompt)
@@ -301,7 +302,7 @@ impl Handler {
                         .create_action_row(|r| {
                             r.create_input_text(|t| {
                                 t.label("Negative prompt")
-                                    .custom_id("negative_prompt")
+                                    .custom_id(consts::value::NEGATIVE_PROMPT)
                                     .required(false)
                                     .style(InputTextStyle::Short)
                                     .value(negative_prompt.unwrap_or_default())
@@ -310,7 +311,7 @@ impl Handler {
                         .create_action_row(|r| {
                             r.create_input_text(|t| {
                                 t.label("Seed")
-                                    .custom_id("seed")
+                                    .custom_id(consts::value::SEED)
                                     .required(false)
                                     .style(InputTextStyle::Short)
                                     .value(seed)
@@ -346,9 +347,9 @@ impl Handler {
             })
             .collect();
 
-        let prompt = rows.get("prompt").map(|s| s.as_str());
-        let negative_prompt = rows.get("negative_prompt").map(|s| s.as_str());
-        let seed = rows.get("seed").map(|s| s.parse::<i64>().ok());
+        let prompt = rows.get(consts::value::PROMPT).map(|s| s.as_str());
+        let negative_prompt = rows.get(consts::value::NEGATIVE_PROMPT).map(|s| s.as_str());
+        let seed = rows.get(consts::value::SEED).map(|s| s.parse::<i64>().ok());
 
         self.mc_retry_impl(http, msi, id, prompt, negative_prompt, seed)
             .await
@@ -439,91 +440,91 @@ impl EventHandler for Handler {
 
         Command::create_global_application_command(&ctx.http, |command| {
             command
-                .name("paint")
+                .name(consts::command::PAINT)
                 .description("Paints your dreams")
                 .create_option(|option| {
                     option
-                        .name("prompt")
+                        .name(consts::value::PROMPT)
                         .description("The prompt to draw")
                         .kind(CommandOptionType::String)
                         .required(true)
                 })
                 .create_option(|option| {
                     option
-                        .name("negative_prompt")
+                        .name(consts::value::NEGATIVE_PROMPT)
                         .description("The prompt to avoid drawing")
                         .kind(CommandOptionType::String)
                         .required(false)
                 })
                 .create_option(|option| {
                     option
-                        .name("seed")
+                        .name(consts::value::SEED)
                         .description("The seed to use")
                         .kind(CommandOptionType::Integer)
                         .required(false)
                 })
                 .create_option(|option| {
                     option
-                        .name("count")
+                        .name(consts::value::COUNT)
                         .description("The number of images to generate")
                         .kind(CommandOptionType::Integer)
-                        .min_int_value(1)
-                        .max_int_value(4)
+                        .min_int_value(consts::limits::COUNT_MIN)
+                        .max_int_value(consts::limits::COUNT_MAX)
                         .required(false)
                 })
                 .create_option(|option| {
                     option
-                        .name("width")
+                        .name(consts::value::WIDTH)
                         .description("The width of the image")
                         .kind(CommandOptionType::Integer)
-                        .min_int_value(64)
-                        .max_int_value(1024)
+                        .min_int_value(consts::limits::WIDTH_MIN)
+                        .max_int_value(consts::limits::WIDTH_MAX)
                         .required(false)
                 })
                 .create_option(|option| {
                     option
-                        .name("height")
+                        .name(consts::value::HEIGHT)
                         .description("The height of the image")
                         .kind(CommandOptionType::Integer)
-                        .min_int_value(64)
-                        .max_int_value(1024)
+                        .min_int_value(consts::limits::HEIGHT_MIN)
+                        .max_int_value(consts::limits::HEIGHT_MAX)
                         .required(false)
                 })
                 .create_option(|option| {
                     option
-                        .name("guidance_scale")
+                        .name(consts::value::GUIDANCE_SCALE)
                         .description("The scale of the guidance to apply")
                         .kind(CommandOptionType::Number)
-                        .min_number_value(2.5)
-                        .max_number_value(20.0)
+                        .min_number_value(consts::limits::GUIDANCE_SCALE_MIN)
+                        .max_number_value(consts::limits::GUIDANCE_SCALE_MAX)
                         .required(false)
                 })
                 .create_option(|option| {
                     option
-                        .name("steps")
+                        .name(consts::value::STEPS)
                         .description("The number of denoising steps to apply")
                         .kind(CommandOptionType::Integer)
-                        .min_int_value(5)
-                        .max_int_value(100)
+                        .min_int_value(consts::limits::STEPS_MIN)
+                        .max_int_value(consts::limits::STEPS_MAX)
                         .required(false)
                 })
                 .create_option(|option| {
                     option
-                        .name("tiling")
+                        .name(consts::value::TILING)
                         .description("Whether or not the image should be tiled at the edges")
                         .kind(CommandOptionType::Boolean)
                         .required(false)
                 })
                 .create_option(|option| {
                     option
-                        .name("restore_faces")
+                        .name(consts::value::RESTORE_FACES)
                         .description("Whether or not the image should have its faces restored")
                         .kind(CommandOptionType::Boolean)
                         .required(false)
                 })
                 .create_option(|option| {
                     let opt = option
-                        .name("sampler")
+                        .name(consts::value::SAMPLER)
                         .description("The sampler to use")
                         .kind(CommandOptionType::String)
                         .required(false);
@@ -539,9 +540,9 @@ impl EventHandler for Handler {
                 command.create_option(|option| {
                     let opt = option
                         .name(if idx == 0 {
-                            "model".to_string()
+                            consts::value::MODEL.to_string()
                         } else {
-                            format!("model{}", idx + 1)
+                            format!("{}{}", consts::value::MODEL, idx + 1)
                         })
                         .description(format!("The model to use, category {}", idx + 1))
                         .kind(CommandOptionType::String)
@@ -562,18 +563,18 @@ impl EventHandler for Handler {
 
         Command::create_global_application_command(&ctx.http, |command| {
             command
-                .name("interrogate")
+                .name(consts::command::INTERROGATE)
                 .description("Interrogates an image to produce a caption")
                 .create_option(|option| {
                     option
-                        .name("image_url")
+                        .name(consts::value::IMAGE_URL)
                         .description("The URL of the image to interrogate")
                         .kind(CommandOptionType::String)
                         .required(true)
                 })
                 .create_option(|option| {
                     let opt = option
-                        .name("interrogator")
+                        .name(consts::value::INTERROGATOR)
                         .description("The interrogator to use")
                         .kind(CommandOptionType::String)
                         .required(true);
@@ -590,7 +591,7 @@ impl EventHandler for Handler {
 
         Command::create_global_application_command(&ctx.http, |command| {
             command
-                .name("exilent")
+                .name(consts::command::EXILENT)
                 .description("Meta-commands for Exilent")
                 .create_option(|option| {
                     option
@@ -610,9 +611,9 @@ impl EventHandler for Handler {
             Interaction::ApplicationCommand(cmd) => {
                 channel_id = Some(cmd.channel_id);
                 match cmd.data.name.as_str() {
-                    "paint" => self.paint(http, cmd).await,
-                    "interrogate" => self.interrogate(http, cmd).await,
-                    "exilent" => self.exilent(http, cmd).await,
+                    consts::command::PAINT => self.paint(http, cmd).await,
+                    consts::command::INTERROGATE => self.interrogate(http, cmd).await,
+                    consts::command::EXILENT => self.exilent(http, cmd).await,
                     _ => Ok(()),
                 }
             }
@@ -685,7 +686,7 @@ async fn issue_generation_task(
     interaction: &dyn DiscordInteraction,
     request: &sd::GenerationRequest<'_>,
 ) -> anyhow::Result<()> {
-    const PROGRESS_SCALE_FACTOR: u32 = 2;
+    use consts::misc::{PROGRESS_SCALE_FACTOR, PROGRESS_UPDATE_MS};
 
     let prompt = request.prompt;
     let negative_prompt = request.negative_prompt;
@@ -735,7 +736,7 @@ async fn issue_generation_task(
         if progress.is_finished() {
             break;
         }
-        tokio::time::sleep(Duration::from_millis(250)).await;
+        tokio::time::sleep(Duration::from_millis(PROGRESS_UPDATE_MS)).await;
     }
 
     // retrieve result
@@ -797,19 +798,20 @@ async fn issue_generation_task(
         );
         let store_key = store.lock().unwrap().insert_generation(generation)?;
 
+        use consts::emojis as E;
         interaction
             .channel_id()
             .send_files(&http, [(bytes.as_slice(), filename.as_str())], |m| {
                 m.content(message).components(|c| {
                     c.create_action_row(|r| {
                         r.create_button(|b| {
-                            b.emoji("🔃".parse::<ReactionType>().unwrap())
+                            b.emoji(E::RETRY.parse::<ReactionType>().unwrap())
                                 .label("Retry")
                                 .style(component::ButtonStyle::Secondary)
                                 .custom_id(cid::Generation::Retry.to_id(store_key))
                         })
                         .create_button(|b| {
-                            b.emoji("↪️".parse::<ReactionType>().unwrap())
+                            b.emoji(E::RETRY_WITH_OPTIONS.parse::<ReactionType>().unwrap())
                                 .label("Retry with options")
                                 .style(component::ButtonStyle::Secondary)
                                 .custom_id(cid::Generation::RetryWithOptions.to_id(store_key))
@@ -817,18 +819,20 @@ async fn issue_generation_task(
                     })
                     .create_action_row(|r| {
                         r.create_button(|b| {
-                            b.emoji("📋".parse::<ReactionType>().unwrap())
+                            b.emoji(E::INTERROGATE_WITH_CLIP.parse::<ReactionType>().unwrap())
                                 .label("CLIP")
                                 .style(component::ButtonStyle::Secondary)
                                 .custom_id(cid::Generation::InterrogateClip.to_id(store_key))
                         })
                         .create_button(|b| {
-                            b.emoji("🧊".parse::<ReactionType>().unwrap())
-                                .label("DeepDanbooru")
-                                .style(component::ButtonStyle::Secondary)
-                                .custom_id(
-                                    cid::Generation::InterrogateDeepDanbooru.to_id(store_key),
-                                )
+                            b.emoji(
+                                E::INTERROGATE_WITH_DEEPDANBOORU
+                                    .parse::<ReactionType>()
+                                    .unwrap(),
+                            )
+                            .label("DeepDanbooru")
+                            .style(component::ButtonStyle::Secondary)
+                            .custom_id(cid::Generation::InterrogateDeepDanbooru.to_id(store_key))
                         })
                     })
                 });
