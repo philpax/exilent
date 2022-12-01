@@ -19,8 +19,8 @@ Many thanks to [aiyabot](https://github.com/Kilvoctu/aiyabot), which paved the w
 DISCORD_TOKEN = TOKEN_FROM_BEFORE
 SD_URL = URL_OF_YOUR_WEBUI_INSTANCE
 # optional (--api-auth):
-SD_USER = USERNAME_FOR_UI
-SD_PASS = PASSWORD_FOR_UI
+SD_USER = USERNAME_FOR_API
+SD_PASS = PASSWORD_FOR_API
 ```
 
 - Run `cargo run` to start Exilent.
