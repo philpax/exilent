@@ -244,7 +244,10 @@ impl Handler {
 
         let interaction: &dyn DiscordInteraction = &aci;
         interaction
-            .create(http, &format!("Interrogating {image_url}"))
+            .create(
+                http,
+                &format!("Interrogating {image_url} with {interrogator}..."),
+            )
             .await?;
 
         let bytes = reqwest::get(&image_url).await?.bytes().await?;
@@ -531,7 +534,7 @@ impl EventHandler for Handler {
                         .required(false);
 
                     for value in sd::Sampler::VALUES {
-                        opt.add_string_choice(value.to_string(), value.to_string());
+                        opt.add_string_choice(value, value);
                     }
 
                     opt
@@ -585,7 +588,7 @@ impl EventHandler for Handler {
                         .required(true);
 
                     for value in sd::Interrogator::VALUES {
-                        opt.add_string_choice(value.to_string(), value.to_string());
+                        opt.add_string_choice(value, value);
                     }
 
                     opt
@@ -875,7 +878,7 @@ async fn issue_interrogate_task(
             r.content(format!(
                 "`{}` - {}{} for {}",
                 result,
-                interrogator.to_string(),
+                interrogator,
                 image_url.map(|s| format!(" on {s}")).unwrap_or_default(),
                 interaction.user().mention()
             ))

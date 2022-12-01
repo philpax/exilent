@@ -1,4 +1,5 @@
 use anyhow::Context;
+use std::fmt::Display;
 
 const SEPARATOR: &str = "#";
 
@@ -40,16 +41,19 @@ impl TryFrom<&str> for Generation {
         }
     }
 }
-impl ToString for Generation {
-    fn to_string(&self) -> String {
-        match self {
-            Self::Retry => Self::GENERATION_RETRY,
-            Self::RetryWithOptions => Self::GENERATION_RETRY_WITH_OPTIONS,
-            Self::RetryWithOptionsResponse => Self::GENERATION_RETRY_WITH_OPTIONS_RESPONSE,
-            Self::InterrogateClip => Self::GENERATION_INTERROGATE_CLIP,
-            Self::InterrogateDeepDanbooru => Self::GENERATION_INTERROGATE_DEEPDANBOORU,
-        }
-        .to_string()
+impl Display for Generation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Retry => Self::GENERATION_RETRY,
+                Self::RetryWithOptions => Self::GENERATION_RETRY_WITH_OPTIONS,
+                Self::RetryWithOptionsResponse => Self::GENERATION_RETRY_WITH_OPTIONS_RESPONSE,
+                Self::InterrogateClip => Self::GENERATION_INTERROGATE_CLIP,
+                Self::InterrogateDeepDanbooru => Self::GENERATION_INTERROGATE_DEEPDANBOORU,
+            }
+        )
     }
 }
 
@@ -70,9 +74,9 @@ impl TryFrom<&str> for Interrogation {
         unimplemented!()
     }
 }
-impl ToString for Interrogation {
-    fn to_string(&self) -> String {
-        String::new()
+impl Display for Interrogation {
+    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Ok(())
     }
 }
 
@@ -108,17 +112,19 @@ impl TryFrom<&str> for CustomId {
         })
     }
 }
-impl ToString for CustomId {
-    fn to_string(&self) -> String {
+impl Display for CustomId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             CustomId::Generation { id, generation } => {
-                format!(
+                write!(
+                    f,
                     "{GENERATION_PREFIX}{SEPARATOR}{id}{SEPARATOR}{}",
                     generation.to_string()
                 )
             }
             CustomId::Interrogation { id, interrogation } => {
-                format!(
+                write!(
+                    f,
                     "{INTERROGATION_PREFIX}{SEPARATOR}{id}{SEPARATOR}{}",
                     interrogation.to_string()
                 )
