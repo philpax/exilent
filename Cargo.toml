@@ -5,11 +5,12 @@ version = "0.1.0"
 
 [dependencies]
 anyhow = "1.0.66"
+chrono = "0.4.23"
 dotenv = "0.15.0"
 image = "0.24.4"
 nanoid = "0.4.0"
 reqwest = "0.11.13"
-serde = { version = "1.0.148", features = ["derive"] }
+rusqlite = { version = "0.28.0", features = ["bundled", "chrono"] }
 serde_json = "1.0.89"
 serenity = {version = "0.11.5", default-features = false, features = ["client", "gateway", "rustls_backend", "model", "collector"]}
 stable-diffusion-a1111-webui-client = {git = "https://github.com/philpax/stable-diffusion-a1111-webui-client.git"}

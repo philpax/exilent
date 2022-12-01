@@ -1,12 +1,11 @@
-use std::collections::HashMap;
-
 use crate::{sd, util};
-use serde::{Deserialize, Serialize};
+use anyhow::Context;
 use stable_diffusion_a1111_webui_client::Sampler;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct Generation {
     pub prompt: String,
+    pub negative_prompt: Option<String>,
     pub seed: i64,
     pub width: u32,
     pub height: u32,
@@ -15,14 +14,16 @@ pub struct Generation {
     pub tiling: bool,
     pub restore_faces: bool,
     pub sampler: Sampler,
-    pub negative_prompt: Option<String>,
     pub model_hash: String,
-    pub image_bytes: Vec<u8>,
+    pub image: Vec<u8>,
+    pub timestamp: chrono::DateTime<chrono::Local>,
+    pub user_id: serenity::model::id::UserId,
 }
 impl Generation {
     pub fn as_message(&self, models: &[sd::Model]) -> String {
-        format!("`/paint prompt:{} seed:{} count:1 width:{} height:{} guidance_scale:{} steps:{} tiling:{} restore_faces:{} sampler:{} {} {}`",
+        format!("`/paint prompt:{}{} seed:{} count:1 width:{} height:{} guidance_scale:{} steps:{} tiling:{} restore_faces:{} sampler:{} {}`",
             self.prompt,
+            self.negative_prompt.as_ref().map(|s| format!(" negative_prompt:{s}")).unwrap_or_default(),
             self.seed,
             self.width,
             self.height,
@@ -31,7 +32,6 @@ impl Generation {
             self.tiling,
             self.restore_faces,
             self.sampler.to_string(),
-            self.negative_prompt.as_ref().map(|s| format!("negative_prompt:{s}")).unwrap_or_default(),
             util::find_model_by_hash(models, &self.model_hash).map(|m| format!("model:{}", m.name)).unwrap_or_default()
         )
     }
@@ -59,41 +59,133 @@ impl Generation {
     }
 }
 
-type StoreValue = Generation;
-pub struct Store(HashMap<String, StoreValue>);
+pub struct Store(rusqlite::Connection);
 impl Store {
-    const FILENAME: &str = "store.json";
+    const FILENAME: &str = "store.sqlite";
 
     pub fn load() -> anyhow::Result<Self> {
-        let file = std::fs::OpenOptions::new()
-            .write(true)
-            .read(true)
-            .create(true)
-            .open(Self::FILENAME)?;
+        let connection = rusqlite::Connection::open(Self::FILENAME)?;
+        connection.execute(
+            r"
+            CREATE TABLE IF NOT EXISTS generation (
+                id	            INTEGER PRIMARY KEY AUTOINCREMENT,
 
-        let data = std::io::read_to_string(file)?;
-        Ok(Self(if data.is_empty() {
-            HashMap::new()
-        } else {
-            serde_json::from_str(&data)?
-        }))
+                prompt	        TEXT NOT NULL,
+                negative_prompt	TEXT,
+                seed	        INTEGER NOT NULL,
+                width	        INTEGER NOT NULL,
+                height	        INTEGER NOT NULL,
+                cfg_scale	    REAL NOT NULL,
+                steps	        INTEGER NOT NULL,
+                tiling	        INTEGER NOT NULL,
+                restore_faces	INTEGER NOT NULL,
+                sampler	        TEXT NOT NULL,
+                model_hash	    TEXT NOT NULL,
+                image	        BLOB NOT NULL,
+
+                user_id         TEXT NOT NULL,
+                timestamp	    TEXT NOT NULL
+            ) STRICT;
+
+            CREATE TABLE IF NOT EXISTS interrogation (
+                id	            INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id	        TEXT NOT NULL,
+
+                generation_id	INTEGER,
+                url	            TEXT,
+
+                result	        TEXT NOT NULL,
+                interrogator	TEXT NOT NULL,
+
+                FOREIGN KEY(generation_id)  REFERENCES generation(id)
+            ) STRICT;
+        ",
+            (),
+        )?;
+
+        Ok(Self(connection))
     }
 
-    pub fn save(&self) -> anyhow::Result<()> {
-        Ok(std::fs::write(
-            Self::FILENAME,
-            serde_json::to_string(&self.0)?,
-        )?)
+    pub fn insert_generation(&mut self, generation: Generation) -> anyhow::Result<i64> {
+        let g = generation;
+        self.0.execute(
+            r"
+            INSERT INTO generation
+                (prompt, negative_prompt, seed, width, height, cfg_scale, steps, tiling,
+                 restore_faces, sampler, model_hash, image, user_id, timestamp)
+            VALUES
+                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ",
+            (
+                g.prompt,
+                g.negative_prompt,
+                g.seed,
+                g.width,
+                g.height,
+                g.cfg_scale,
+                g.steps,
+                g.tiling,
+                g.restore_faces,
+                g.sampler.to_string(),
+                g.model_hash,
+                g.image,
+                g.user_id.as_u64().to_string(),
+                g.timestamp,
+            ),
+        )?;
+
+        Ok(self.0.last_insert_rowid())
     }
 
-    pub fn insert(&mut self, value: StoreValue) -> anyhow::Result<String> {
-        let key = nanoid::nanoid!();
-        self.0.insert(key.clone(), value);
-        self.save()?;
-        Ok(key)
-    }
+    pub fn get_generation(&self, key: i64) -> anyhow::Result<Generation> {
+        let (
+            prompt,
+            negative_prompt,
+            seed,
+            width,
+            height,
+            cfg_scale,
+            steps,
+            tiling,
+            restore_faces,
+            sampler,
+            model_hash,
+            image,
+            user_id,
+            timestamp,
+        ) = self
+            .0
+            .query_row::<(_, _, _, _, _, _, _, _, _, String, _, _, String, _), _, _>(
+                r"
+            SELECT
+                prompt, negative_prompt, seed, width, height, cfg_scale, steps, tiling,
+                restore_faces, sampler, model_hash, image, user_id, timestamp
+            FROM
+                generation
+            WHERE
+                id = ?
+            ",
+                [key],
+                |r| r.try_into(),
+            )?;
 
-    pub fn get(&self, key: &str) -> Option<&StoreValue> {
-        self.0.get(key)
+        Ok(Generation {
+            prompt,
+            seed,
+            width,
+            height,
+            cfg_scale,
+            steps,
+            tiling,
+            restore_faces,
+            sampler: Sampler::try_from(sampler.as_str())
+                .ok()
+                .context("invalid sampler in db")?,
+            negative_prompt,
+            model_hash,
+            image,
+            timestamp,
+            user_id: serenity::model::id::UserId(user_id.parse()?),
+        })
     }
 }

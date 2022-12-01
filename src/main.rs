@@ -27,11 +27,13 @@ use serenity::{
     Client,
 };
 
-use stable_diffusion_a1111_webui_client as sd;
-use store::Store;
-
+mod custom_id;
 mod store;
 mod util;
+
+use custom_id as cid;
+use stable_diffusion_a1111_webui_client as sd;
+use store::Store;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -217,7 +219,7 @@ impl Handler {
         &self,
         http: &Http,
         mci: &MessageComponentInteraction,
-        id: &str,
+        id: i64,
     ) -> anyhow::Result<()> {
         self.mc_retry_impl(http, mci, id, None, None, Some(None))
             .await
@@ -227,13 +229,13 @@ impl Handler {
         &self,
         http: &Http,
         mci: &MessageComponentInteraction,
-        id: &str,
+        id: i64,
     ) -> anyhow::Result<()> {
         let (old_prompt, negative_prompt, seed) = self
             .store
             .lock()
             .unwrap()
-            .get(id)
+            .get_generation(id)
             .map(|g| (g.prompt.clone(), g.negative_prompt.clone(), Some(g.seed)))
             .unwrap_or_default();
 
@@ -270,7 +272,7 @@ impl Handler {
                         })
                     })
                     .title("Retry with prompt")
-                    .custom_id(format!("{id}#retry_with_options_response"))
+                    .custom_id(cid::Generation::RetryWithOptionsResponse.to_id(id))
                 })
         })
         .await?;
@@ -282,7 +284,7 @@ impl Handler {
         &self,
         http: &Http,
         msi: &ModalSubmitInteraction,
-        id: &str,
+        id: i64,
     ) -> anyhow::Result<()> {
         let rows: HashMap<String, String> = msi
             .data
@@ -310,7 +312,7 @@ impl Handler {
         &self,
         http: &Http,
         interaction: &dyn DiscordInteraction,
-        id: &str,
+        id: i64,
         prompt: Option<&str>,
         negative_prompt: Option<&str>,
         // None: don't override; Some(None): override with a fresh seed; Some(Some(seed)): override with seed
@@ -320,7 +322,7 @@ impl Handler {
             .store
             .lock()
             .unwrap()
-            .get(id)
+            .get_generation(id)
             .context("id not found in store")?
             .clone();
 
@@ -329,7 +331,7 @@ impl Handler {
             request.prompt = prompt;
         }
         if let Some(negative_prompt) = negative_prompt {
-            request.negative_prompt = Some(negative_prompt);
+            request.negative_prompt = Some(negative_prompt).filter(|s| !s.is_empty());
         }
         if let Some(seed) = seed {
             request.seed = seed;
@@ -365,7 +367,7 @@ impl Handler {
         &self,
         http: &Http,
         interaction: &dyn DiscordInteraction,
-        id: &str,
+        id: i64,
         interrogator: sd::Interrogator,
     ) -> anyhow::Result<()> {
         interaction.create(http, "Interrogating...").await?;
@@ -375,9 +377,9 @@ impl Handler {
                 .store
                 .lock()
                 .unwrap()
-                .get(id)
+                .get_generation(id)
                 .context("id not found in store")?
-                .image_bytes,
+                .image,
         )?;
 
         issue_interrogate_task(&self.client, interaction, http, image, None, interrogator).await
@@ -557,61 +559,66 @@ impl EventHandler for Handler {
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         let mut channel_id = None;
+        let http = &ctx.http;
         let result = match interaction {
             Interaction::ApplicationCommand(cmd) => {
                 channel_id = Some(cmd.channel_id);
                 match cmd.data.name.as_str() {
-                    "paint" => self.paint(&ctx.http, cmd).await,
-                    "interrogate" => self.interrogate(&ctx.http, cmd).await,
-                    "exilent" => self.exilent(&ctx.http, cmd).await,
+                    "paint" => self.paint(http, cmd).await,
+                    "interrogate" => self.interrogate(http, cmd).await,
+                    "exilent" => self.exilent(http, cmd).await,
                     _ => Ok(()),
                 }
             }
-            Interaction::MessageComponent(cmp) => {
-                channel_id = Some(cmp.channel_id);
+            Interaction::MessageComponent(mci) => {
+                channel_id = Some(mci.channel_id);
 
-                let (id, int_cmd) = cmp
-                    .data
-                    .custom_id
-                    .split_once('#')
+                let custom_id = cid::CustomId::try_from(mci.data.custom_id.as_str())
                     .expect("invalid interaction id");
 
-                match int_cmd {
-                    "retry" => self.mc_retry(&ctx.http, &cmp, id).await,
-                    "retry_with_options" => self.mc_retry_with_options(&ctx.http, &cmp, id).await,
-                    "interrogate_clip" => {
-                        self.mc_interrogate(&ctx.http, &cmp, id, sd::Interrogator::Clip)
-                            .await
-                    }
-                    "interrogate_dd" => {
-                        self.mc_interrogate(&ctx.http, &cmp, id, sd::Interrogator::DeepDanbooru)
-                            .await
-                    }
-                    _ => Ok(()),
+                match custom_id {
+                    cid::CustomId::Generation { id, generation } => match generation {
+                        cid::Generation::Retry => self.mc_retry(http, &mci, id).await,
+                        cid::Generation::RetryWithOptions => {
+                            self.mc_retry_with_options(http, &mci, id).await
+                        }
+                        cid::Generation::InterrogateClip => {
+                            self.mc_interrogate(http, &mci, id, sd::Interrogator::Clip)
+                                .await
+                        }
+                        cid::Generation::InterrogateDeepDanbooru => {
+                            self.mc_interrogate(http, &mci, id, sd::Interrogator::DeepDanbooru)
+                                .await
+                        }
+
+                        cid::Generation::RetryWithOptionsResponse => Ok(()),
+                    },
+                    cid::CustomId::Interrogation { .. } => todo!(),
                 }
             }
             Interaction::ModalSubmit(msi) => {
                 channel_id = Some(msi.channel_id);
 
-                let (id, int_cmd) = msi
-                    .data
-                    .custom_id
-                    .split_once('#')
+                let custom_id = cid::CustomId::try_from(msi.data.custom_id.as_str())
                     .expect("invalid interaction id");
 
-                match int_cmd {
-                    "retry_with_options_response" => {
-                        self.mc_retry_with_options_response(&ctx.http, &msi, id)
-                            .await
-                    }
+                match custom_id {
+                    cid::CustomId::Generation { id, generation } => match generation {
+                        cid::Generation::RetryWithOptionsResponse => {
+                            self.mc_retry_with_options_response(http, &msi, id).await
+                        }
 
-                    _ => Ok(()),
+                        cid::Generation::Retry => Ok(()),
+                        cid::Generation::RetryWithOptions => Ok(()),
+                        cid::Generation::InterrogateClip => Ok(()),
+                        cid::Generation::InterrogateDeepDanbooru => Ok(()),
+                    },
+                    cid::CustomId::Interrogation { .. } => todo!(),
                 }
             }
             _ => Ok(()),
         };
         if let Some(channel_id) = channel_id {
-            let http = &ctx.http;
             if let Err(err) = result.as_ref() {
                 channel_id
                     .send_message(http, |r| r.content(format!("Error: {err:?}")))
@@ -733,14 +740,16 @@ async fn issue_generation_task(
                 .map(|s| s.to_string())
                 .filter(|p| !p.is_empty()),
             model_hash: result.info.model_hash.clone(),
-            image_bytes: bytes.clone(),
+            image: bytes.clone(),
+            timestamp: result.info.job_timestamp,
+            user_id: interaction.user().id,
         };
         let message = format!(
             "{} - {}",
             generation.as_message(models),
             interaction.user().mention()
         );
-        let store_key = store.lock().unwrap().insert(generation)?;
+        let store_key = store.lock().unwrap().insert_generation(generation)?;
 
         interaction
             .channel_id()
@@ -751,13 +760,13 @@ async fn issue_generation_task(
                             b.emoji("🔃".parse::<ReactionType>().unwrap())
                                 .label("Retry")
                                 .style(component::ButtonStyle::Secondary)
-                                .custom_id(format!("{store_key}#retry"))
+                                .custom_id(cid::Generation::Retry.to_id(store_key))
                         })
                         .create_button(|b| {
                             b.emoji("↪️".parse::<ReactionType>().unwrap())
                                 .label("Retry with options")
                                 .style(component::ButtonStyle::Secondary)
-                                .custom_id(format!("{store_key}#retry_with_options"))
+                                .custom_id(cid::Generation::RetryWithOptions.to_id(store_key))
                         })
                     })
                     .create_action_row(|r| {
@@ -765,13 +774,15 @@ async fn issue_generation_task(
                             b.emoji("📋".parse::<ReactionType>().unwrap())
                                 .label("CLIP")
                                 .style(component::ButtonStyle::Secondary)
-                                .custom_id(format!("{store_key}#interrogate_clip"))
+                                .custom_id(cid::Generation::InterrogateClip.to_id(store_key))
                         })
                         .create_button(|b| {
                             b.emoji("🧊".parse::<ReactionType>().unwrap())
                                 .label("DeepDanbooru")
                                 .style(component::ButtonStyle::Secondary)
-                                .custom_id(format!("{store_key}#interrogate_dd"))
+                                .custom_id(
+                                    cid::Generation::InterrogateDeepDanbooru.to_id(store_key),
+                                )
                         })
                     })
                 });
