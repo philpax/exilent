@@ -2,6 +2,7 @@ use std::{collections::HashMap, env, io::Cursor, time::Duration};
 
 use anyhow::Context as AnyhowContext;
 use dotenv::dotenv;
+use rand::seq::SliceRandom;
 use serenity::{
     async_trait,
     client::{Context, EventHandler},
@@ -443,6 +444,13 @@ impl Handler {
 
         // always applied
         let prompt = interrogation.result;
+        let prompt = if let sd::Interrogator::DeepDanbooru = interrogation.interrogator {
+            let mut components: Vec<_> = prompt.split(", ").collect();
+            components.shuffle(&mut rand::thread_rng());
+            components.join(", ")
+        } else {
+            prompt
+        };
 
         // use last generation as default if available
         let last_generation = self
@@ -958,7 +966,7 @@ async fn issue_interrogate_task(
                                 .parse::<ReactionType>()
                                 .unwrap(),
                         )
-                        .label("Generate")
+                        .label("Generate with shuffle")
                         .style(component::ButtonStyle::Secondary)
                         .custom_id(cid::Interrogation::Generate.to_id(store_key))
                     })

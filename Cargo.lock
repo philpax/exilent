@@ -365,6 +365,7 @@ dependencies = [
  "dotenv",
  "image",
  "nanoid",
+ "rand",
  "reqwest",
  "rusqlite",
  "serde_json",
