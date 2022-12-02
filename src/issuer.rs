@@ -201,7 +201,9 @@ pub async fn interrogate_task(
     ),
 ) -> anyhow::Result<()> {
     let result = client.interrogate(&image, interrogator).await?;
-    let result = if constant::config::USE_SAFE_TAGS {
+    let result = if matches!(interrogator, sd::Interrogator::DeepDanbooru)
+        && constant::config::USE_SAFE_TAGS
+    {
         result
             .split(", ")
             .filter(|s| safe_tags.contains(s))
