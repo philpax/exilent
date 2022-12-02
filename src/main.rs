@@ -409,7 +409,9 @@ impl Handler {
         id: i64,
         interrogator: sd::Interrogator,
     ) -> anyhow::Result<()> {
-        interaction.create(http, "Interrogating...").await?;
+        interaction
+            .create(http, &format!("Interrogating with {interrogator}..."))
+            .await?;
 
         let image = image::load_from_memory(
             &self
@@ -425,6 +427,46 @@ impl Handler {
             &self.store,
             http,
             image,
+            store::InterrogationSource::GenerationId(id),
+            interrogator,
+        )
+        .await
+    }
+
+    async fn mc_interrogate_reinterrogate(
+        &self,
+        http: &Http,
+        interaction: &dyn DiscordInteraction,
+        id: i64,
+        interrogator: sd::Interrogator,
+    ) -> anyhow::Result<()> {
+        interaction
+            .create(http, &format!("Interrogating with {interrogator}..."))
+            .await?;
+
+        let interrogation = self
+            .store
+            .get_interrogation(id)?
+            .context("interrogation not found")?;
+
+        let image = match interrogation.source {
+            store::InterrogationSource::GenerationId(id) => {
+                self.store
+                    .get_generation(id)?
+                    .context("generation not found")?
+                    .image
+            }
+            store::InterrogationSource::Url(url) => {
+                reqwest::get(&url).await?.bytes().await?.to_vec()
+            }
+        };
+
+        issue_interrogate_task(
+            &self.client,
+            interaction,
+            &self.store,
+            http,
+            image::load_from_memory(&image)?,
             store::InterrogationSource::GenerationId(id),
             interrogator,
         )
@@ -713,6 +755,24 @@ impl EventHandler for Handler {
                         cid::Interrogation::Generate => {
                             self.mc_interrogate_generate(http, &mci, id).await
                         }
+                        cid::Interrogation::ReinterrogateWithClip => {
+                            self.mc_interrogate_reinterrogate(
+                                http,
+                                &mci,
+                                id,
+                                sd::Interrogator::Clip,
+                            )
+                            .await
+                        }
+                        cid::Interrogation::ReinterrogateWithDeepDanbooru => {
+                            self.mc_interrogate_reinterrogate(
+                                http,
+                                &mci,
+                                id,
+                                sd::Interrogator::DeepDanbooru,
+                            )
+                            .await
+                        }
                     },
                 }
             }
@@ -969,7 +1029,32 @@ async fn issue_interrogate_task(
                         .label("Generate with shuffle")
                         .style(component::ButtonStyle::Secondary)
                         .custom_id(cid::Interrogation::Generate.to_id(store_key))
-                    })
+                    });
+
+                    match interrogator {
+                        sd::Interrogator::Clip => r.create_button(|b| {
+                            b.emoji(
+                                consts::emojis::INTERROGATE_WITH_DEEPDANBOORU
+                                    .parse::<ReactionType>()
+                                    .unwrap(),
+                            )
+                            .label("Re-interrogate with DeepDanbooru")
+                            .style(component::ButtonStyle::Secondary)
+                            .custom_id(
+                                cid::Interrogation::ReinterrogateWithDeepDanbooru.to_id(store_key),
+                            )
+                        }),
+                        sd::Interrogator::DeepDanbooru => r.create_button(|b| {
+                            b.emoji(
+                                consts::emojis::INTERROGATE_WITH_CLIP
+                                    .parse::<ReactionType>()
+                                    .unwrap(),
+                            )
+                            .label("Re-interrogate with CLIP")
+                            .style(component::ButtonStyle::Secondary)
+                            .custom_id(cid::Interrogation::ReinterrogateWithClip.to_id(store_key))
+                        }),
+                    }
                 })
             })
         })

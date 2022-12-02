@@ -61,9 +61,13 @@ impl Display for Generation {
 #[derive(Clone, Copy)]
 pub enum Interrogation {
     Generate,
+    ReinterrogateWithClip,
+    ReinterrogateWithDeepDanbooru,
 }
 impl Interrogation {
     const INTERROGATION_GENERATE: &str = "generate";
+    const INTERROGATION_REINTERROGATE_CLIP: &str = "reint_clip";
+    const INTERROGATION_REINTERROGATE_DD: &str = "reint_dd";
 
     pub fn to_id(self, id: i64) -> CustomId {
         CustomId::Interrogation {
@@ -78,6 +82,8 @@ impl TryFrom<&str> for Interrogation {
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
             Self::INTERROGATION_GENERATE => Ok(Self::Generate),
+            Self::INTERROGATION_REINTERROGATE_CLIP => Ok(Self::ReinterrogateWithClip),
+            Self::INTERROGATION_REINTERROGATE_DD => Ok(Self::ReinterrogateWithDeepDanbooru),
             _ => Err(anyhow::anyhow!("invalid command for interrogation")),
         }
     }
@@ -89,6 +95,8 @@ impl Display for Interrogation {
             "{}",
             match self {
                 Self::Generate => Self::INTERROGATION_GENERATE,
+                Self::ReinterrogateWithClip => Self::INTERROGATION_REINTERROGATE_CLIP,
+                Self::ReinterrogateWithDeepDanbooru => Self::INTERROGATION_REINTERROGATE_DD,
             }
         )
     }
