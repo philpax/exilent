@@ -1,8 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
     env,
-    io::Cursor,
-    time::Duration,
 };
 
 use anyhow::Context as AnyhowContext;
@@ -27,14 +25,16 @@ use serenity::{
     Client,
 };
 
-mod consts;
+mod constant;
 mod custom_id;
+mod issuer;
 mod store;
 mod util;
 
 use custom_id as cid;
 use stable_diffusion_a1111_webui_client as sd;
 use store::Store;
+use util::DiscordInteraction;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -119,16 +119,16 @@ impl Handler {
         let interaction: &dyn DiscordInteraction = &aci;
 
         // always applied
-        let prompt = util::get_value(&aci, consts::value::PROMPT)
+        let prompt = util::get_value(&aci, constant::value::PROMPT)
             .and_then(util::value_to_string)
             .context("expected prompt")?;
 
         let negative_prompt =
-            util::get_value(&aci, consts::value::NEGATIVE_PROMPT).and_then(util::value_to_string);
+            util::get_value(&aci, constant::value::NEGATIVE_PROMPT).and_then(util::value_to_string);
 
-        let seed = util::get_value(&aci, consts::value::SEED).and_then(util::value_to_int);
+        let seed = util::get_value(&aci, constant::value::SEED).and_then(util::value_to_int);
 
-        let batch_count = util::get_value(&aci, consts::value::COUNT)
+        let batch_count = util::get_value(&aci, constant::value::COUNT)
             .and_then(util::value_to_int)
             .map(|v| v as u32);
 
@@ -136,41 +136,41 @@ impl Handler {
         let last_generation = self.store.get_last_generation_for_user(aci.user.id)?;
         let last_generation = last_generation.as_ref();
 
-        let width = util::get_value(&aci, consts::value::WIDTH)
+        let width = util::get_value(&aci, constant::value::WIDTH)
             .and_then(util::value_to_int)
             .map(|v| v as u32 / 64 * 64)
             .or_else(|| last_generation.map(|g| g.width));
 
-        let height = util::get_value(&aci, consts::value::HEIGHT)
+        let height = util::get_value(&aci, constant::value::HEIGHT)
             .and_then(util::value_to_int)
             .map(|v| v as u32 / 64 * 64)
             .or_else(|| last_generation.map(|g| g.height));
 
-        let cfg_scale = util::get_value(&aci, consts::value::GUIDANCE_SCALE)
+        let cfg_scale = util::get_value(&aci, constant::value::GUIDANCE_SCALE)
             .and_then(util::value_to_number)
             .map(|v| v as f32)
             .or_else(|| last_generation.map(|g| g.cfg_scale));
 
-        let steps = util::get_value(&aci, consts::value::STEPS)
+        let steps = util::get_value(&aci, constant::value::STEPS)
             .and_then(util::value_to_int)
             .map(|v| v as u32)
             .or_else(|| last_generation.map(|g| g.steps));
 
-        let tiling = util::get_value(&aci, consts::value::TILING)
+        let tiling = util::get_value(&aci, constant::value::TILING)
             .and_then(util::value_to_bool)
             .or_else(|| last_generation.map(|g| g.tiling));
 
-        let restore_faces = util::get_value(&aci, consts::value::RESTORE_FACES)
+        let restore_faces = util::get_value(&aci, constant::value::RESTORE_FACES)
             .and_then(util::value_to_bool)
             .or_else(|| last_generation.map(|g| g.restore_faces));
 
-        let sampler = util::get_value(&aci, consts::value::SAMPLER)
+        let sampler = util::get_value(&aci, constant::value::SAMPLER)
             .and_then(util::value_to_string)
             .and_then(|v| sd::Sampler::try_from(v.as_str()).ok())
             .or_else(|| last_generation.map(|g| g.sampler));
 
         let model = {
-            let models: Vec<_> = util::get_values_starting_with(&aci, consts::value::MODEL)
+            let models: Vec<_> = util::get_values_starting_with(&aci, constant::value::MODEL)
                 .flat_map(util::value_to_string)
                 .collect();
             if models.len() > 1 {
@@ -201,7 +201,7 @@ impl Handler {
             )
             .await?;
 
-        issue_generation_task(
+        issuer::generation_task(
             &self.client,
             &self.models,
             &self.store,
@@ -232,11 +232,11 @@ impl Handler {
         http: &Http,
         aci: ApplicationCommandInteraction,
     ) -> anyhow::Result<()> {
-        let image_url = util::get_value(&aci, consts::value::IMAGE_URL)
+        let image_url = util::get_value(&aci, constant::value::IMAGE_URL)
             .and_then(util::value_to_string)
             .context("expected image_url")?;
 
-        let interrogator = util::get_value(&aci, consts::value::INTERROGATOR)
+        let interrogator = util::get_value(&aci, constant::value::INTERROGATOR)
             .and_then(util::value_to_string)
             .and_then(|v| sd::Interrogator::try_from(v.as_str()).ok())
             .context("expected interrogator")?;
@@ -252,15 +252,17 @@ impl Handler {
         let bytes = reqwest::get(&image_url).await?.bytes().await?;
         let image = image::load_from_memory(&bytes)?;
 
-        issue_interrogate_task(
+        issuer::interrogate_task(
             &self.client,
             &self.store,
             &self.safe_tags,
             interaction,
             http,
-            image,
-            store::InterrogationSource::Url(image_url),
-            interrogator,
+            (
+                image,
+                store::InterrogationSource::Url(image_url),
+                interrogator,
+            ),
         )
         .await
     }
@@ -296,7 +298,7 @@ impl Handler {
                         c.create_action_row(|r| {
                             r.create_input_text(|t| {
                                 t.label("Prompt")
-                                    .custom_id(consts::value::PROMPT)
+                                    .custom_id(constant::value::PROMPT)
                                     .required(true)
                                     .style(InputTextStyle::Short)
                                     .value(old_prompt)
@@ -305,7 +307,7 @@ impl Handler {
                         .create_action_row(|r| {
                             r.create_input_text(|t| {
                                 t.label("Negative prompt")
-                                    .custom_id(consts::value::NEGATIVE_PROMPT)
+                                    .custom_id(constant::value::NEGATIVE_PROMPT)
                                     .required(false)
                                     .style(InputTextStyle::Short)
                                     .value(negative_prompt.unwrap_or_default())
@@ -314,7 +316,7 @@ impl Handler {
                         .create_action_row(|r| {
                             r.create_input_text(|t| {
                                 t.label("Seed")
-                                    .custom_id(consts::value::SEED)
+                                    .custom_id(constant::value::SEED)
                                     .required(false)
                                     .style(InputTextStyle::Short)
                                     .value(seed)
@@ -350,9 +352,13 @@ impl Handler {
             })
             .collect();
 
-        let prompt = rows.get(consts::value::PROMPT).map(|s| s.as_str());
-        let negative_prompt = rows.get(consts::value::NEGATIVE_PROMPT).map(|s| s.as_str());
-        let seed = rows.get(consts::value::SEED).map(|s| s.parse::<i64>().ok());
+        let prompt = rows.get(constant::value::PROMPT).map(|s| s.as_str());
+        let negative_prompt = rows
+            .get(constant::value::NEGATIVE_PROMPT)
+            .map(|s| s.as_str());
+        let seed = rows
+            .get(constant::value::SEED)
+            .map(|s| s.parse::<i64>().ok());
 
         self.mc_retry_impl(http, msi, id, prompt, negative_prompt, seed)
             .await
@@ -398,7 +404,7 @@ impl Handler {
             )
             .await?;
 
-        issue_generation_task(
+        issuer::generation_task(
             &self.client,
             &self.models,
             &self.store,
@@ -430,15 +436,17 @@ impl Handler {
                 .image,
         )?;
 
-        issue_interrogate_task(
+        issuer::interrogate_task(
             &self.client,
             &self.store,
             &self.safe_tags,
             interaction,
             http,
-            image,
-            store::InterrogationSource::GenerationId(id),
-            interrogator,
+            (
+                image,
+                store::InterrogationSource::GenerationId(id),
+                interrogator,
+            ),
         )
         .await
     }
@@ -471,15 +479,17 @@ impl Handler {
             }
         };
 
-        issue_interrogate_task(
+        issuer::interrogate_task(
             &self.client,
             &self.store,
             &self.safe_tags,
             interaction,
             http,
-            image::load_from_memory(&image)?,
-            store::InterrogationSource::GenerationId(id),
-            interrogator,
+            (
+                image::load_from_memory(&image)?,
+                store::InterrogationSource::GenerationId(id),
+                interrogator,
+            ),
         )
         .await
     }
@@ -525,7 +535,7 @@ impl Handler {
             .create(http, &format!("`{prompt}`: Generating..."))
             .await?;
 
-        issue_generation_task(
+        issuer::generation_task(
             &self.client,
             &self.models,
             &self.store,
@@ -559,91 +569,91 @@ impl EventHandler for Handler {
 
         Command::create_global_application_command(&ctx.http, |command| {
             command
-                .name(consts::command::PAINT)
+                .name(constant::command::PAINT)
                 .description("Paints your dreams")
                 .create_option(|option| {
                     option
-                        .name(consts::value::PROMPT)
+                        .name(constant::value::PROMPT)
                         .description("The prompt to draw")
                         .kind(CommandOptionType::String)
                         .required(true)
                 })
                 .create_option(|option| {
                     option
-                        .name(consts::value::NEGATIVE_PROMPT)
+                        .name(constant::value::NEGATIVE_PROMPT)
                         .description("The prompt to avoid drawing")
                         .kind(CommandOptionType::String)
                         .required(false)
                 })
                 .create_option(|option| {
                     option
-                        .name(consts::value::SEED)
+                        .name(constant::value::SEED)
                         .description("The seed to use")
                         .kind(CommandOptionType::Integer)
                         .required(false)
                 })
                 .create_option(|option| {
                     option
-                        .name(consts::value::COUNT)
+                        .name(constant::value::COUNT)
                         .description("The number of images to generate")
                         .kind(CommandOptionType::Integer)
-                        .min_int_value(consts::limits::COUNT_MIN)
-                        .max_int_value(consts::limits::COUNT_MAX)
+                        .min_int_value(constant::limits::COUNT_MIN)
+                        .max_int_value(constant::limits::COUNT_MAX)
                         .required(false)
                 })
                 .create_option(|option| {
                     option
-                        .name(consts::value::WIDTH)
+                        .name(constant::value::WIDTH)
                         .description("The width of the image")
                         .kind(CommandOptionType::Integer)
-                        .min_int_value(consts::limits::WIDTH_MIN)
-                        .max_int_value(consts::limits::WIDTH_MAX)
+                        .min_int_value(constant::limits::WIDTH_MIN)
+                        .max_int_value(constant::limits::WIDTH_MAX)
                         .required(false)
                 })
                 .create_option(|option| {
                     option
-                        .name(consts::value::HEIGHT)
+                        .name(constant::value::HEIGHT)
                         .description("The height of the image")
                         .kind(CommandOptionType::Integer)
-                        .min_int_value(consts::limits::HEIGHT_MIN)
-                        .max_int_value(consts::limits::HEIGHT_MAX)
+                        .min_int_value(constant::limits::HEIGHT_MIN)
+                        .max_int_value(constant::limits::HEIGHT_MAX)
                         .required(false)
                 })
                 .create_option(|option| {
                     option
-                        .name(consts::value::GUIDANCE_SCALE)
+                        .name(constant::value::GUIDANCE_SCALE)
                         .description("The scale of the guidance to apply")
                         .kind(CommandOptionType::Number)
-                        .min_number_value(consts::limits::GUIDANCE_SCALE_MIN)
-                        .max_number_value(consts::limits::GUIDANCE_SCALE_MAX)
+                        .min_number_value(constant::limits::GUIDANCE_SCALE_MIN)
+                        .max_number_value(constant::limits::GUIDANCE_SCALE_MAX)
                         .required(false)
                 })
                 .create_option(|option| {
                     option
-                        .name(consts::value::STEPS)
+                        .name(constant::value::STEPS)
                         .description("The number of denoising steps to apply")
                         .kind(CommandOptionType::Integer)
-                        .min_int_value(consts::limits::STEPS_MIN)
-                        .max_int_value(consts::limits::STEPS_MAX)
+                        .min_int_value(constant::limits::STEPS_MIN)
+                        .max_int_value(constant::limits::STEPS_MAX)
                         .required(false)
                 })
                 .create_option(|option| {
                     option
-                        .name(consts::value::TILING)
+                        .name(constant::value::TILING)
                         .description("Whether or not the image should be tiled at the edges")
                         .kind(CommandOptionType::Boolean)
                         .required(false)
                 })
                 .create_option(|option| {
                     option
-                        .name(consts::value::RESTORE_FACES)
+                        .name(constant::value::RESTORE_FACES)
                         .description("Whether or not the image should have its faces restored")
                         .kind(CommandOptionType::Boolean)
                         .required(false)
                 })
                 .create_option(|option| {
                     let opt = option
-                        .name(consts::value::SAMPLER)
+                        .name(constant::value::SAMPLER)
                         .description("The sampler to use")
                         .kind(CommandOptionType::String)
                         .required(false);
@@ -657,15 +667,15 @@ impl EventHandler for Handler {
 
             for (idx, chunk) in self
                 .models
-                .chunks(consts::misc::MODEL_CHUNK_COUNT)
+                .chunks(constant::misc::MODEL_CHUNK_COUNT)
                 .enumerate()
             {
                 command.create_option(|option| {
                     let opt = option
                         .name(if idx == 0 {
-                            consts::value::MODEL.to_string()
+                            constant::value::MODEL.to_string()
                         } else {
-                            format!("{}{}", consts::value::MODEL, idx + 1)
+                            format!("{}{}", constant::value::MODEL, idx + 1)
                         })
                         .description(format!("The model to use, category {}", idx + 1))
                         .kind(CommandOptionType::String)
@@ -686,18 +696,18 @@ impl EventHandler for Handler {
 
         Command::create_global_application_command(&ctx.http, |command| {
             command
-                .name(consts::command::INTERROGATE)
+                .name(constant::command::INTERROGATE)
                 .description("Interrogates an image to produce a caption")
                 .create_option(|option| {
                     option
-                        .name(consts::value::IMAGE_URL)
+                        .name(constant::value::IMAGE_URL)
                         .description("The URL of the image to interrogate")
                         .kind(CommandOptionType::String)
                         .required(true)
                 })
                 .create_option(|option| {
                     let opt = option
-                        .name(consts::value::INTERROGATOR)
+                        .name(constant::value::INTERROGATOR)
                         .description("The interrogator to use")
                         .kind(CommandOptionType::String)
                         .required(true);
@@ -714,7 +724,7 @@ impl EventHandler for Handler {
 
         Command::create_global_application_command(&ctx.http, |command| {
             command
-                .name(consts::command::EXILENT)
+                .name(constant::command::EXILENT)
                 .description("Meta-commands for Exilent")
                 .create_option(|option| {
                     option
@@ -734,9 +744,9 @@ impl EventHandler for Handler {
             Interaction::ApplicationCommand(cmd) => {
                 channel_id = Some(cmd.channel_id);
                 match cmd.data.name.as_str() {
-                    consts::command::PAINT => self.paint(http, cmd).await,
-                    consts::command::INTERROGATE => self.interrogate(http, cmd).await,
-                    consts::command::EXILENT => self.exilent(http, cmd).await,
+                    constant::command::PAINT => self.paint(http, cmd).await,
+                    constant::command::INTERROGATE => self.interrogate(http, cmd).await,
+                    constant::command::EXILENT => self.exilent(http, cmd).await,
                     _ => Ok(()),
                 }
             }
@@ -760,7 +770,7 @@ impl EventHandler for Handler {
                             self.mc_interrogate(http, &mci, id, sd::Interrogator::DeepDanbooru)
                                 .await
                         }
-                        cid::Generation::RetryWithOptionsResponse => Ok(()),
+                        cid::Generation::RetryWithOptionsResponse => unreachable!(),
                     },
                     cid::CustomId::Interrogation { id, interrogation } => match interrogation {
                         cid::Interrogation::Generate => {
@@ -799,10 +809,10 @@ impl EventHandler for Handler {
                             self.mc_retry_with_options_response(http, &msi, id).await
                         }
 
-                        cid::Generation::Retry => Ok(()),
-                        cid::Generation::RetryWithOptions => Ok(()),
-                        cid::Generation::InterrogateClip => Ok(()),
-                        cid::Generation::InterrogateDeepDanbooru => Ok(()),
+                        cid::Generation::Retry => unreachable!(),
+                        cid::Generation::RetryWithOptions => unreachable!(),
+                        cid::Generation::InterrogateClip => unreachable!(),
+                        cid::Generation::InterrogateDeepDanbooru => unreachable!(),
                     },
                     cid::CustomId::Interrogation { .. } => todo!(),
                 }
@@ -821,333 +831,3 @@ impl EventHandler for Handler {
         }
     }
 }
-
-async fn issue_generation_task(
-    client: &sd::Client,
-    models: &[sd::Model],
-    store: &Store,
-    http: &Http,
-    interaction: &dyn DiscordInteraction,
-    request: &sd::GenerationRequest<'_>,
-) -> anyhow::Result<()> {
-    use consts::misc::{PROGRESS_SCALE_FACTOR, PROGRESS_UPDATE_MS};
-
-    let prompt = request.prompt;
-    let negative_prompt = request.negative_prompt;
-
-    // generate and update progress
-    let task = client.generate_image_from_text(request)?;
-    loop {
-        let progress = task.progress().await?;
-        let image_bytes = progress
-            .current_image
-            .as_ref()
-            .map(|i| {
-                encode_image_for_attachment(i.resize(
-                    i.width() / PROGRESS_SCALE_FACTOR,
-                    i.height() / PROGRESS_SCALE_FACTOR,
-                    image::imageops::FilterType::Nearest,
-                ))
-            })
-            .transpose()?;
-
-        interaction
-            .get_interaction_message(http)
-            .await?
-            .edit(http, |m| {
-                m.content(format!(
-                    "`{}`{}: {:.02}% complete. ({:.02} seconds remaining)",
-                    request.prompt,
-                    request
-                        .negative_prompt
-                        .map(|s| format!(" - `{s}`"))
-                        .unwrap_or_default(),
-                    progress.progress_factor * 100.0,
-                    progress.eta_seconds
-                ));
-
-                if let Some(image_bytes) = &image_bytes {
-                    if let Some(a) = m.0.get_mut("attachments").and_then(|e| e.as_array_mut()) {
-                        a.clear();
-                    }
-                    m.attachment((image_bytes.as_slice(), "progress.png"));
-                }
-
-                m
-            })
-            .await?;
-
-        if progress.is_finished() {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(PROGRESS_UPDATE_MS)).await;
-    }
-
-    // retrieve result
-    let result = task.block().await?;
-    let images = result
-        .images
-        .into_iter()
-        .enumerate()
-        .map(|(idx, image)| {
-            Ok((
-                format!("image_{idx}.png"),
-                encode_image_for_attachment(image)?,
-            ))
-        })
-        .collect::<anyhow::Result<Vec<_>>>()?;
-
-    // send images
-    for (idx, ((filename, bytes), seed)) in images.iter().zip(result.info.seeds.iter()).enumerate()
-    {
-        interaction
-            .get_interaction_message(http)
-            .await?
-            .edit(http, |m| {
-                m.content(format!(
-                    "`{}`{}: Uploading {}/{}...",
-                    request.prompt,
-                    request
-                        .negative_prompt
-                        .map(|s| format!(" - `{s}`"))
-                        .unwrap_or_default(),
-                    idx + 1,
-                    images.len()
-                ))
-            })
-            .await?;
-
-        let generation = store::Generation {
-            prompt: prompt.to_owned(),
-            seed: *seed,
-            width: result.info.width,
-            height: result.info.height,
-            cfg_scale: result.info.cfg_scale,
-            steps: result.info.steps,
-            tiling: result.info.tiling,
-            restore_faces: result.info.restore_faces,
-            sampler: result.info.sampler,
-            negative_prompt: negative_prompt
-                .map(|s| s.to_string())
-                .filter(|p| !p.is_empty()),
-            model_hash: result.info.model_hash.clone(),
-            image: bytes.clone(),
-            timestamp: result.info.job_timestamp,
-            user_id: interaction.user().id,
-        };
-        let message = format!(
-            "{} - {}",
-            generation.as_message(models),
-            interaction.user().mention()
-        );
-        let store_key = store.insert_generation(generation)?;
-
-        use consts::emojis as E;
-        interaction
-            .channel_id()
-            .send_files(&http, [(bytes.as_slice(), filename.as_str())], |m| {
-                m.content(message).components(|c| {
-                    c.create_action_row(|r| {
-                        r.create_button(|b| {
-                            b.emoji(E::RETRY.parse::<ReactionType>().unwrap())
-                                .label("Retry")
-                                .style(component::ButtonStyle::Secondary)
-                                .custom_id(cid::Generation::Retry.to_id(store_key))
-                        })
-                        .create_button(|b| {
-                            b.emoji(E::RETRY_WITH_OPTIONS.parse::<ReactionType>().unwrap())
-                                .label("Retry with options")
-                                .style(component::ButtonStyle::Secondary)
-                                .custom_id(cid::Generation::RetryWithOptions.to_id(store_key))
-                        })
-                    })
-                    .create_action_row(|r| {
-                        r.create_button(|b| {
-                            b.emoji(E::INTERROGATE_WITH_CLIP.parse::<ReactionType>().unwrap())
-                                .label("CLIP")
-                                .style(component::ButtonStyle::Secondary)
-                                .custom_id(cid::Generation::InterrogateClip.to_id(store_key))
-                        })
-                        .create_button(|b| {
-                            b.emoji(
-                                E::INTERROGATE_WITH_DEEPDANBOORU
-                                    .parse::<ReactionType>()
-                                    .unwrap(),
-                            )
-                            .label("DeepDanbooru")
-                            .style(component::ButtonStyle::Secondary)
-                            .custom_id(cid::Generation::InterrogateDeepDanbooru.to_id(store_key))
-                        })
-                    })
-                });
-
-                if let Some(message) = interaction.message() {
-                    m.reference_message(message);
-                }
-
-                m
-            })
-            .await?;
-    }
-    interaction
-        .get_interaction_message(http)
-        .await?
-        .delete(http)
-        .await?;
-
-    Ok(())
-}
-
-async fn issue_interrogate_task(
-    client: &sd::Client,
-    store: &Store,
-    safe_tags: &HashSet<&str>,
-    interaction: &dyn DiscordInteraction,
-    http: &Http,
-    image: image::DynamicImage,
-    source: store::InterrogationSource,
-    interrogator: sd::Interrogator,
-) -> Result<(), anyhow::Error> {
-    let result = client.interrogate(&image, interrogator).await?;
-    let result = if consts::config::USE_SAFE_TAGS {
-        result
-            .split(", ")
-            .filter(|s| safe_tags.contains(s))
-            .collect::<Vec<_>>()
-            .join(", ")
-    } else {
-        result
-    };
-
-    let store_key = store.insert_interrogation(store::Interrogation {
-        user_id: interaction.user().id,
-        source: source.clone(),
-        result: result.clone(),
-        interrogator,
-    })?;
-
-    interaction
-        .get_interaction_message(http)
-        .await?
-        .edit(http, |m| {
-            m.content(format!(
-                "`{}` - {}{} for {}",
-                result,
-                interrogator,
-                match source {
-                    store::InterrogationSource::GenerationId(_) => String::new(),
-                    store::InterrogationSource::Url(url) => format!(" on {url}"),
-                },
-                interaction.user().mention()
-            ))
-            .components(|c| {
-                c.create_action_row(|r| {
-                    r.create_button(|b| {
-                        b.emoji(
-                            consts::emojis::INTERROGATE_GENERATE
-                                .parse::<ReactionType>()
-                                .unwrap(),
-                        )
-                        .label(match interrogator {
-                            sd::Interrogator::Clip => "Generate",
-                            sd::Interrogator::DeepDanbooru => "Generate with shuffle",
-                        })
-                        .style(component::ButtonStyle::Secondary)
-                        .custom_id(cid::Interrogation::Generate.to_id(store_key))
-                    });
-
-                    match interrogator {
-                        sd::Interrogator::Clip => r.create_button(|b| {
-                            b.emoji(
-                                consts::emojis::INTERROGATE_WITH_DEEPDANBOORU
-                                    .parse::<ReactionType>()
-                                    .unwrap(),
-                            )
-                            .label("Re-interrogate with DeepDanbooru")
-                            .style(component::ButtonStyle::Secondary)
-                            .custom_id(
-                                cid::Interrogation::ReinterrogateWithDeepDanbooru.to_id(store_key),
-                            )
-                        }),
-                        sd::Interrogator::DeepDanbooru => r.create_button(|b| {
-                            b.emoji(
-                                consts::emojis::INTERROGATE_WITH_CLIP
-                                    .parse::<ReactionType>()
-                                    .unwrap(),
-                            )
-                            .label("Re-interrogate with CLIP")
-                            .style(component::ButtonStyle::Secondary)
-                            .custom_id(cid::Interrogation::ReinterrogateWithClip.to_id(store_key))
-                        }),
-                    }
-                })
-            })
-        })
-        .await?;
-
-    Ok(())
-}
-
-fn encode_image_for_attachment(image: image::DynamicImage) -> anyhow::Result<Vec<u8>> {
-    let mut bytes: Vec<u8> = Vec::new();
-    let mut cursor = Cursor::new(&mut bytes);
-    image.write_to(&mut cursor, image::ImageOutputFormat::Png)?;
-    Ok(bytes)
-}
-
-#[async_trait]
-trait DiscordInteraction: Send + Sync {
-    async fn create(&self, http: &Http, message: &str) -> anyhow::Result<()>;
-    async fn get_interaction_message(&self, http: &Http) -> anyhow::Result<Message>;
-
-    fn channel_id(&self) -> ChannelId;
-    fn message(&self) -> Option<&Message>;
-    fn user(&self) -> &User;
-}
-macro_rules! implement_interaction {
-    ($name:ident) => {
-        #[async_trait]
-        impl DiscordInteraction for $name {
-            async fn create(&self, http: &Http, msg: &str) -> anyhow::Result<()> {
-                Ok(self
-                    .create_interaction_response(http, |response| {
-                        response
-                            .kind(InteractionResponseType::ChannelMessageWithSource)
-                            .interaction_response_data(|message| message.content(msg))
-                    })
-                    .await?)
-            }
-            async fn get_interaction_message(&self, http: &Http) -> anyhow::Result<Message> {
-                Ok(self.get_interaction_response(http).await?)
-            }
-
-            fn channel_id(&self) -> ChannelId {
-                self.channel_id
-            }
-            fn user(&self) -> &User {
-                &self.user
-            }
-            interaction_message!($name);
-        }
-    };
-}
-macro_rules! interaction_message {
-    (ApplicationCommandInteraction) => {
-        fn message(&self) -> Option<&Message> {
-            None
-        }
-    };
-    (MessageComponentInteraction) => {
-        fn message(&self) -> Option<&Message> {
-            Some(&self.message)
-        }
-    };
-    (ModalSubmitInteraction) => {
-        fn message(&self) -> Option<&Message> {
-            self.message.as_ref()
-        }
-    };
-}
-implement_interaction!(ApplicationCommandInteraction);
-implement_interaction!(MessageComponentInteraction);
-implement_interaction!(ModalSubmitInteraction);

@@ -173,7 +173,7 @@ pub struct Generation {
 }
 impl Generation {
     pub fn as_message(&self, models: &[sd::Model]) -> String {
-        use crate::consts as c;
+        use crate::constant as c;
         format!(
             "`/{} {}:{}{} {}:{} {}:{} {}:{} {}:{} {}:{} {}:{} {}:{} {}:{}{}`",
             c::command::PAINT,

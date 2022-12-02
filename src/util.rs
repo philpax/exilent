@@ -1,5 +1,18 @@
-use serenity::model::prelude::interaction::application_command::{
-    ApplicationCommandInteraction, CommandDataOptionValue,
+use serenity::{
+    async_trait,
+    http::Http,
+    model::{
+        prelude::{
+            interaction::{
+                application_command::{ApplicationCommandInteraction, CommandDataOptionValue},
+                message_component::MessageComponentInteraction,
+                modal::ModalSubmitInteraction,
+                InteractionResponseType,
+            },
+            ChannelId, Message,
+        },
+        user::User,
+    },
 };
 
 use crate::sd;
@@ -82,3 +95,67 @@ pub fn find_model_by_hash<'a>(
         &hash_wrapped[1..hash_wrapped.len() - 1] == model_hash
     })
 }
+
+pub fn encode_image_to_png_bytes(image: image::DynamicImage) -> anyhow::Result<Vec<u8>> {
+    let mut bytes: Vec<u8> = Vec::new();
+    let mut cursor = std::io::Cursor::new(&mut bytes);
+    image.write_to(&mut cursor, image::ImageOutputFormat::Png)?;
+    Ok(bytes)
+}
+
+#[async_trait]
+pub trait DiscordInteraction: Send + Sync {
+    async fn create(&self, http: &Http, message: &str) -> anyhow::Result<()>;
+    async fn get_interaction_message(&self, http: &Http) -> anyhow::Result<Message>;
+
+    fn channel_id(&self) -> ChannelId;
+    fn message(&self) -> Option<&Message>;
+    fn user(&self) -> &User;
+}
+macro_rules! implement_interaction {
+    ($name:ident) => {
+        #[async_trait]
+        impl DiscordInteraction for $name {
+            async fn create(&self, http: &Http, msg: &str) -> anyhow::Result<()> {
+                Ok(self
+                    .create_interaction_response(http, |response| {
+                        response
+                            .kind(InteractionResponseType::ChannelMessageWithSource)
+                            .interaction_response_data(|message| message.content(msg))
+                    })
+                    .await?)
+            }
+            async fn get_interaction_message(&self, http: &Http) -> anyhow::Result<Message> {
+                Ok(self.get_interaction_response(http).await?)
+            }
+
+            fn channel_id(&self) -> ChannelId {
+                self.channel_id
+            }
+            fn user(&self) -> &User {
+                &self.user
+            }
+            interaction_message!($name);
+        }
+    };
+}
+macro_rules! interaction_message {
+    (ApplicationCommandInteraction) => {
+        fn message(&self) -> Option<&Message> {
+            None
+        }
+    };
+    (MessageComponentInteraction) => {
+        fn message(&self) -> Option<&Message> {
+            Some(&self.message)
+        }
+    };
+    (ModalSubmitInteraction) => {
+        fn message(&self) -> Option<&Message> {
+            self.message.as_ref()
+        }
+    };
+}
+implement_interaction!(ApplicationCommandInteraction);
+implement_interaction!(MessageComponentInteraction);
+implement_interaction!(ModalSubmitInteraction);
