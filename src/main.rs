@@ -1026,7 +1026,10 @@ async fn issue_interrogate_task(
                                 .parse::<ReactionType>()
                                 .unwrap(),
                         )
-                        .label("Generate with shuffle")
+                        .label(match interrogator {
+                            sd::Interrogator::Clip => "Generate",
+                            sd::Interrogator::DeepDanbooru => "Generate with shuffle",
+                        })
                         .style(component::ButtonStyle::Secondary)
                         .custom_id(cid::Interrogation::Generate.to_id(store_key))
                     });
