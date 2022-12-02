@@ -1,4 +1,9 @@
-use std::{collections::HashMap, env, io::Cursor, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    env,
+    io::Cursor,
+    time::Duration,
+};
 
 use anyhow::Context as AnyhowContext;
 use dotenv::dotenv;
@@ -50,6 +55,7 @@ async fn main() -> anyhow::Result<()> {
     };
     let models = client.models().await?;
     let store = Store::load()?;
+    let safe_tags = include_str!("safe_tags.txt").lines().collect();
 
     // Build our client.
     let mut client = Client::builder(
@@ -60,6 +66,7 @@ async fn main() -> anyhow::Result<()> {
         client,
         models,
         store,
+        safe_tags,
     })
     .await
     .expect("Error creating client");
@@ -78,6 +85,7 @@ struct Handler {
     client: sd::Client,
     models: Vec<sd::Model>,
     store: Store,
+    safe_tags: HashSet<&'static str>,
 }
 /// Commands
 impl Handler {
@@ -246,8 +254,9 @@ impl Handler {
 
         issue_interrogate_task(
             &self.client,
-            interaction,
             &self.store,
+            &self.safe_tags,
+            interaction,
             http,
             image,
             store::InterrogationSource::Url(image_url),
@@ -423,8 +432,9 @@ impl Handler {
 
         issue_interrogate_task(
             &self.client,
-            interaction,
             &self.store,
+            &self.safe_tags,
+            interaction,
             http,
             image,
             store::InterrogationSource::GenerationId(id),
@@ -463,8 +473,9 @@ impl Handler {
 
         issue_interrogate_task(
             &self.client,
-            interaction,
             &self.store,
+            &self.safe_tags,
+            interaction,
             http,
             image::load_from_memory(&image)?,
             store::InterrogationSource::GenerationId(id),
@@ -989,14 +1000,25 @@ async fn issue_generation_task(
 
 async fn issue_interrogate_task(
     client: &sd::Client,
-    interaction: &dyn DiscordInteraction,
     store: &Store,
+    safe_tags: &HashSet<&str>,
+    interaction: &dyn DiscordInteraction,
     http: &Http,
     image: image::DynamicImage,
     source: store::InterrogationSource,
     interrogator: sd::Interrogator,
 ) -> Result<(), anyhow::Error> {
     let result = client.interrogate(&image, interrogator).await?;
+    let result = if consts::config::USE_SAFE_TAGS {
+        result
+            .split(", ")
+            .filter(|s| safe_tags.contains(s))
+            .collect::<Vec<_>>()
+            .join(", ")
+    } else {
+        result
+    };
+
     let store_key = store.insert_interrogation(store::Interrogation {
         user_id: interaction.user().id,
         source: source.clone(),

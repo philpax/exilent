@@ -1,3 +1,10 @@
+/// config
+pub mod config {
+    /// If set, Exilent will remove any tags in DeepDanbooru results that aren't
+    /// present in safe_tags.txt.
+    pub const USE_SAFE_TAGS: bool = true;
+}
+
 /// discord command names
 pub mod command {
     pub const PAINT: &str = "paint";
