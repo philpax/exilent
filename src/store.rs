@@ -1,10 +1,12 @@
+use std::sync::Mutex;
+
 use crate::{sd, util};
 use anyhow::Context;
 use rusqlite::OptionalExtension;
 use serenity::model::id::UserId;
 use stable_diffusion_a1111_webui_client::Sampler;
 
-pub struct Store(rusqlite::Connection);
+pub struct Store(Mutex<rusqlite::Connection>);
 impl Store {
     const FILENAME: &str = "store.sqlite";
 
@@ -53,12 +55,13 @@ impl Store {
             (),
         )?;
 
-        Ok(Self(connection))
+        Ok(Self(Mutex::new(connection)))
     }
 
-    pub fn insert_generation(&mut self, generation: Generation) -> anyhow::Result<i64> {
+    pub fn insert_generation(&self, generation: Generation) -> anyhow::Result<i64> {
         let g = generation;
-        self.0.execute(
+        let db = &mut *self.0.lock().unwrap();
+        db.execute(
             r"
             INSERT INTO generation
                 (prompt, negative_prompt, seed, width, height, cfg_scale, steps, tiling,
@@ -84,7 +87,7 @@ impl Store {
             ),
         )?;
 
-        Ok(self.0.last_insert_rowid())
+        Ok(db.last_insert_rowid())
     }
 
     pub fn get_generation(&self, key: i64) -> anyhow::Result<Option<Generation>> {
@@ -100,7 +103,8 @@ impl Store {
 
     pub fn insert_interrogation(&self, interrogation: Interrogation) -> anyhow::Result<i64> {
         let i = interrogation;
-        self.0.execute(
+        let db = &mut *self.0.lock().unwrap();
+        db.execute(
             r"
             INSERT INTO interrogation
                 (user_id, timestamp, generation_id, url, result, interrogator)
@@ -117,15 +121,14 @@ impl Store {
             ),
         )?;
 
-        Ok(self.0.last_insert_rowid())
+        Ok(db.last_insert_rowid())
     }
 
     pub fn get_interrogation(&self, key: i64) -> anyhow::Result<Option<Interrogation>> {
+        let db = &mut *self.0.lock().unwrap();
         let Some((
             user_id, generation_id, url, result, interrogator
-        )) = self
-            .0
-            .query_row(
+        )) = db.query_row(
                 r"
                 SELECT
                     user_id, generation_id, url, result, interrogator
@@ -300,6 +303,7 @@ impl Store {
         predicate: &str,
         params: impl rusqlite::Params,
     ) -> anyhow::Result<Option<Generation>> {
+        let db = &mut *self.0.lock().unwrap();
         let Some((
             prompt,
             negative_prompt,
@@ -315,9 +319,7 @@ impl Store {
             image,
             user_id,
             timestamp,
-        )) = self
-            .0
-            .query_row::<(_, _, _, _, _, _, _, _, _, String, _, _, String, _), _, _>(
+        )) = db.query_row::<(_, _, _, _, _, _, _, _, _, String, _, _, String, _), _, _>(
                 &format!(
                     r"
                     SELECT

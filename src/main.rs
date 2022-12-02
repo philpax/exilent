@@ -1,10 +1,4 @@
-use std::{
-    collections::HashMap,
-    env,
-    io::Cursor,
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::{collections::HashMap, env, io::Cursor, time::Duration};
 
 use anyhow::Context as AnyhowContext;
 use dotenv::dotenv;
@@ -54,7 +48,7 @@ async fn main() -> anyhow::Result<()> {
         .unwrap()
     };
     let models = client.models().await?;
-    let store = Arc::new(Mutex::new(Store::load()?));
+    let store = Store::load()?;
 
     // Build our client.
     let mut client = Client::builder(
@@ -82,7 +76,7 @@ async fn main() -> anyhow::Result<()> {
 struct Handler {
     client: sd::Client,
     models: Vec<sd::Model>,
-    store: Arc<Mutex<Store>>,
+    store: Store,
 }
 /// Commands
 impl Handler {
@@ -130,11 +124,7 @@ impl Handler {
             .map(|v| v as u32);
 
         // use last generation as default if available
-        let last_generation = self
-            .store
-            .lock()
-            .unwrap()
-            .get_last_generation_for_user(aci.user.id)?;
+        let last_generation = self.store.get_last_generation_for_user(aci.user.id)?;
         let last_generation = last_generation.as_ref();
 
         let width = util::get_value(&aci, consts::value::WIDTH)
@@ -205,7 +195,7 @@ impl Handler {
         issue_generation_task(
             &self.client,
             &self.models,
-            self.store.clone(),
+            &self.store,
             http,
             interaction,
             &sd::GenerationRequest {
@@ -256,7 +246,7 @@ impl Handler {
         issue_interrogate_task(
             &self.client,
             interaction,
-            self.store.clone(),
+            &self.store,
             http,
             image,
             store::InterrogationSource::Url(image_url),
@@ -285,8 +275,6 @@ impl Handler {
     ) -> anyhow::Result<()> {
         let (old_prompt, negative_prompt, seed) = self
             .store
-            .lock()
-            .unwrap()
             .get_generation(id)?
             .map(|g| (g.prompt, g.negative_prompt, g.seed))
             .context("generation not found")?;
@@ -372,8 +360,6 @@ impl Handler {
     ) -> anyhow::Result<()> {
         let generation = self
             .store
-            .lock()
-            .unwrap()
             .get_generation(id)?
             .context("generation not found")?
             .clone();
@@ -405,7 +391,7 @@ impl Handler {
         issue_generation_task(
             &self.client,
             &self.models,
-            self.store.clone(),
+            &self.store,
             http,
             interaction,
             &request,
@@ -427,8 +413,6 @@ impl Handler {
         let image = image::load_from_memory(
             &self
                 .store
-                .lock()
-                .unwrap()
                 .get_generation(id)?
                 .context("generation not found")?
                 .image,
@@ -437,7 +421,7 @@ impl Handler {
         issue_interrogate_task(
             &self.client,
             interaction,
-            self.store.clone(),
+            &self.store,
             http,
             image,
             store::InterrogationSource::GenerationId(id),
@@ -454,8 +438,6 @@ impl Handler {
     ) -> anyhow::Result<()> {
         let interrogation = self
             .store
-            .lock()
-            .unwrap()
             .get_interrogation(id)?
             .context("no interrogation found")?;
 
@@ -465,8 +447,6 @@ impl Handler {
         // use last generation as default if available
         let last_generation = self
             .store
-            .lock()
-            .unwrap()
             .get_last_generation_for_user(interaction.user().id)?;
         let last_generation = last_generation.as_ref();
 
@@ -487,7 +467,7 @@ impl Handler {
         issue_generation_task(
             &self.client,
             &self.models,
-            self.store.clone(),
+            &self.store,
             http,
             interaction,
             &sd::GenerationRequest {
@@ -766,7 +746,7 @@ impl EventHandler for Handler {
 async fn issue_generation_task(
     client: &sd::Client,
     models: &[sd::Model],
-    store: Arc<Mutex<Store>>,
+    store: &Store,
     http: &Http,
     interaction: &dyn DiscordInteraction,
     request: &sd::GenerationRequest<'_>,
@@ -881,7 +861,7 @@ async fn issue_generation_task(
             generation.as_message(models),
             interaction.user().mention()
         );
-        let store_key = store.lock().unwrap().insert_generation(generation)?;
+        let store_key = store.insert_generation(generation)?;
 
         use consts::emojis as E;
         interaction
@@ -942,22 +922,19 @@ async fn issue_generation_task(
 async fn issue_interrogate_task(
     client: &sd::Client,
     interaction: &dyn DiscordInteraction,
-    store: Arc<Mutex<Store>>,
+    store: &Store,
     http: &Http,
     image: image::DynamicImage,
     source: store::InterrogationSource,
     interrogator: sd::Interrogator,
 ) -> Result<(), anyhow::Error> {
     let result = client.interrogate(&image, interrogator).await?;
-    let store_key = store
-        .lock()
-        .unwrap()
-        .insert_interrogation(store::Interrogation {
-            user_id: interaction.user().id,
-            source: source.clone(),
-            result: result.clone(),
-            interrogator,
-        })?;
+    let store_key = store.insert_interrogation(store::Interrogation {
+        user_id: interaction.user().id,
+        source: source.clone(),
+        result: result.clone(),
+        interrogator,
+    })?;
 
     interaction
         .get_interaction_message(http)
