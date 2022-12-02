@@ -4,6 +4,153 @@ use rusqlite::OptionalExtension;
 use serenity::model::id::UserId;
 use stable_diffusion_a1111_webui_client::Sampler;
 
+pub struct Store(rusqlite::Connection);
+impl Store {
+    const FILENAME: &str = "store.sqlite";
+
+    pub fn load() -> anyhow::Result<Self> {
+        let connection = rusqlite::Connection::open(Self::FILENAME)?;
+        connection.execute(
+            r"
+            CREATE TABLE IF NOT EXISTS generation (
+                id	            INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                prompt	        TEXT NOT NULL,
+                negative_prompt	TEXT,
+                seed	        INTEGER NOT NULL,
+                width	        INTEGER NOT NULL,
+                height	        INTEGER NOT NULL,
+                cfg_scale	    REAL NOT NULL,
+                steps	        INTEGER NOT NULL,
+                tiling	        INTEGER NOT NULL,
+                restore_faces	INTEGER NOT NULL,
+                sampler	        TEXT NOT NULL,
+                model_hash	    TEXT NOT NULL,
+                image	        BLOB NOT NULL,
+
+                user_id         TEXT NOT NULL,
+                timestamp	    TEXT NOT NULL
+            ) STRICT;
+            ",
+            (),
+        )?;
+        connection.execute(
+            r"
+            CREATE TABLE IF NOT EXISTS interrogation (
+                id	            INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id	        TEXT NOT NULL,
+                timestamp	    TEXT NOT NULL,
+
+                generation_id	INTEGER,
+                url	            TEXT,
+
+                result	        TEXT NOT NULL,
+                interrogator	TEXT NOT NULL,
+
+                FOREIGN KEY(generation_id)  REFERENCES generation(id)
+            ) STRICT;
+        ",
+            (),
+        )?;
+
+        Ok(Self(connection))
+    }
+
+    pub fn insert_generation(&mut self, generation: Generation) -> anyhow::Result<i64> {
+        let g = generation;
+        self.0.execute(
+            r"
+            INSERT INTO generation
+                (prompt, negative_prompt, seed, width, height, cfg_scale, steps, tiling,
+                 restore_faces, sampler, model_hash, image, user_id, timestamp)
+            VALUES
+                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ",
+            (
+                g.prompt,
+                g.negative_prompt,
+                g.seed,
+                g.width,
+                g.height,
+                g.cfg_scale,
+                g.steps,
+                g.tiling,
+                g.restore_faces,
+                g.sampler.to_string(),
+                g.model_hash,
+                g.image,
+                g.user_id.as_u64().to_string(),
+                g.timestamp,
+            ),
+        )?;
+
+        Ok(self.0.last_insert_rowid())
+    }
+
+    pub fn get_generation(&self, key: i64) -> anyhow::Result<Option<Generation>> {
+        self.get_generation_with_predicate(r"id = ?", [key])
+    }
+
+    pub fn get_last_generation_for_user(
+        &self,
+        user_id: UserId,
+    ) -> anyhow::Result<Option<Generation>> {
+        self.get_generation_with_predicate(r"user_id = ?", [user_id.as_u64().to_string()])
+    }
+
+    pub fn insert_interrogation(&self, interrogation: Interrogation) -> anyhow::Result<i64> {
+        let i = interrogation;
+        self.0.execute(
+            r"
+            INSERT INTO interrogation
+                (user_id, timestamp, generation_id, url, result, interrogator)
+            VALUES
+                (?, ?, ?, ?, ?, ?)
+            ",
+            (
+                i.user_id.as_u64().to_string(),
+                chrono::Local::now(),
+                i.source.generation_id(),
+                i.source.url(),
+                i.result,
+                i.interrogator.to_string(),
+            ),
+        )?;
+
+        Ok(self.0.last_insert_rowid())
+    }
+
+    pub fn get_interrogation(&self, key: i64) -> anyhow::Result<Option<Interrogation>> {
+        let Some((
+            user_id, generation_id, url, result, interrogator
+        )) = self
+            .0
+            .query_row(
+                r"
+                SELECT
+                    user_id, generation_id, url, result, interrogator
+                FROM
+                    interrogation
+                WHERE
+                    id = ?
+                ORDER BY timestamp
+                DESC LIMIT 1
+                ",
+                [key],
+                |r| r.try_into(),
+            )
+            .optional()? else { return Ok(None); };
+
+        Ok(Some(Interrogation::from_db(
+            user_id,
+            generation_id,
+            url,
+            result,
+            interrogator,
+        )?))
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Generation {
     pub prompt: String,
@@ -90,95 +237,64 @@ impl Generation {
     }
 }
 
-pub struct Store(rusqlite::Connection);
+#[derive(Debug, Clone)]
+pub enum InterrogationSource {
+    GenerationId(i64),
+    Url(String),
+}
+impl InterrogationSource {
+    pub fn generation_id(&self) -> Option<i64> {
+        match self {
+            InterrogationSource::GenerationId(id) => Some(*id),
+            _ => None,
+        }
+    }
+
+    pub fn url(&self) -> Option<&str> {
+        match self {
+            InterrogationSource::Url(url) => Some(url.as_str()),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Interrogation {
+    pub user_id: UserId,
+    pub source: InterrogationSource,
+    pub result: String,
+    pub interrogator: sd::Interrogator,
+}
+impl Interrogation {
+    pub fn from_db(
+        user_id: String,
+        generation_id: Option<i64>,
+        url: Option<String>,
+        result: String,
+        interrogator: String,
+    ) -> anyhow::Result<Self> {
+        let source = match (generation_id, url) {
+            (Some(id), None) => InterrogationSource::GenerationId(id),
+            (None, Some(url)) => InterrogationSource::Url(url),
+
+            (Some(_), Some(_)) => anyhow::bail!("both generation_id and url were set"),
+            (None, None) => anyhow::bail!("neither generation_id or url were set"),
+        };
+
+        let interrogator = sd::Interrogator::try_from(interrogator.as_str())
+            .ok()
+            .context("invalid interrogator")?;
+
+        Ok(Self {
+            user_id: UserId(user_id.parse()?),
+            source,
+            result,
+            interrogator,
+        })
+    }
+}
+
 impl Store {
-    const FILENAME: &str = "store.sqlite";
-
-    pub fn load() -> anyhow::Result<Self> {
-        let connection = rusqlite::Connection::open(Self::FILENAME)?;
-        connection.execute(
-            r"
-            CREATE TABLE IF NOT EXISTS generation (
-                id	            INTEGER PRIMARY KEY AUTOINCREMENT,
-
-                prompt	        TEXT NOT NULL,
-                negative_prompt	TEXT,
-                seed	        INTEGER NOT NULL,
-                width	        INTEGER NOT NULL,
-                height	        INTEGER NOT NULL,
-                cfg_scale	    REAL NOT NULL,
-                steps	        INTEGER NOT NULL,
-                tiling	        INTEGER NOT NULL,
-                restore_faces	INTEGER NOT NULL,
-                sampler	        TEXT NOT NULL,
-                model_hash	    TEXT NOT NULL,
-                image	        BLOB NOT NULL,
-
-                user_id         TEXT NOT NULL,
-                timestamp	    TEXT NOT NULL
-            ) STRICT;
-
-            CREATE TABLE IF NOT EXISTS interrogation (
-                id	            INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id	        TEXT NOT NULL,
-
-                generation_id	INTEGER,
-                url	            TEXT,
-
-                result	        TEXT NOT NULL,
-                interrogator	TEXT NOT NULL,
-
-                FOREIGN KEY(generation_id)  REFERENCES generation(id)
-            ) STRICT;
-        ",
-            (),
-        )?;
-
-        Ok(Self(connection))
-    }
-
-    pub fn insert_generation(&mut self, generation: Generation) -> anyhow::Result<i64> {
-        let g = generation;
-        self.0.execute(
-            r"
-            INSERT INTO generation
-                (prompt, negative_prompt, seed, width, height, cfg_scale, steps, tiling,
-                 restore_faces, sampler, model_hash, image, user_id, timestamp)
-            VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ",
-            (
-                g.prompt,
-                g.negative_prompt,
-                g.seed,
-                g.width,
-                g.height,
-                g.cfg_scale,
-                g.steps,
-                g.tiling,
-                g.restore_faces,
-                g.sampler.to_string(),
-                g.model_hash,
-                g.image,
-                g.user_id.as_u64().to_string(),
-                g.timestamp,
-            ),
-        )?;
-
-        Ok(self.0.last_insert_rowid())
-    }
-
-    pub fn get_generation(&self, key: i64) -> anyhow::Result<Option<Generation>> {
-        self.get_generation_with_predicate(r"id = ?", [key])
-    }
-
-    pub fn get_last_generation_for_user(
-        &self,
-        user_id: UserId,
-    ) -> anyhow::Result<Option<Generation>> {
-        self.get_generation_with_predicate(r"user_id = ?", [user_id.as_u64().to_string()])
-    }
-
     fn get_generation_with_predicate(
         &self,
         predicate: &str,

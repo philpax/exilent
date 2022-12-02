@@ -30,6 +30,8 @@ pub mod emojis {
     pub const RETRY_WITH_OPTIONS: &str = "↪️";
     pub const INTERROGATE_WITH_CLIP: &str = "📋";
     pub const INTERROGATE_WITH_DEEPDANBOORU: &str = "🧊";
+
+    pub const INTERROGATE_GENERATE: &str = "🎲";
 }
 
 /// limits

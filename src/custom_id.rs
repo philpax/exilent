@@ -57,9 +57,12 @@ impl Display for Generation {
     }
 }
 
-pub enum Interrogation {}
+pub enum Interrogation {
+    Generate,
+}
 impl Interrogation {
-    #[allow(dead_code)]
+    const INTERROGATION_GENERATE: &str = "generate";
+
     pub fn to_id(self, id: i64) -> CustomId {
         CustomId::Interrogation {
             id,
@@ -70,13 +73,22 @@ impl Interrogation {
 impl TryFrom<&str> for Interrogation {
     type Error = anyhow::Error;
 
-    fn try_from(_value: &str) -> Result<Self, Self::Error> {
-        unimplemented!()
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            Self::INTERROGATION_GENERATE => Ok(Self::Generate),
+            _ => Err(anyhow::anyhow!("invalid command for interrogation")),
+        }
     }
 }
 impl Display for Interrogation {
-    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Ok(())
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Generate => Self::INTERROGATION_GENERATE,
+            }
+        )
     }
 }
 

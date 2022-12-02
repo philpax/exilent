@@ -256,9 +256,10 @@ impl Handler {
         issue_interrogate_task(
             &self.client,
             interaction,
+            self.store.clone(),
             http,
             image,
-            Some(&image_url),
+            store::InterrogationSource::Url(image_url),
             interrogator,
         )
         .await
@@ -433,7 +434,80 @@ impl Handler {
                 .image,
         )?;
 
-        issue_interrogate_task(&self.client, interaction, http, image, None, interrogator).await
+        issue_interrogate_task(
+            &self.client,
+            interaction,
+            self.store.clone(),
+            http,
+            image,
+            store::InterrogationSource::GenerationId(id),
+            interrogator,
+        )
+        .await
+    }
+
+    async fn mc_interrogate_generate(
+        &self,
+        http: &Http,
+        interaction: &dyn DiscordInteraction,
+        id: i64,
+    ) -> anyhow::Result<()> {
+        let interrogation = self
+            .store
+            .lock()
+            .unwrap()
+            .get_interrogation(id)?
+            .context("no interrogation found")?;
+
+        // always applied
+        let prompt = interrogation.result;
+
+        // use last generation as default if available
+        let last_generation = self
+            .store
+            .lock()
+            .unwrap()
+            .get_last_generation_for_user(interaction.user().id)?;
+        let last_generation = last_generation.as_ref();
+
+        let width = last_generation.map(|g| g.width);
+        let height = last_generation.map(|g| g.height);
+        let cfg_scale = last_generation.map(|g| g.cfg_scale);
+        let steps = last_generation.map(|g| g.steps);
+        let tiling = last_generation.map(|g| g.tiling);
+        let restore_faces = last_generation.map(|g| g.restore_faces);
+        let sampler = last_generation.map(|g| g.sampler);
+        let model = last_generation
+            .and_then(|g| util::find_model_by_hash(&self.models, &g.model_hash).map(|t| t.1));
+
+        interaction
+            .create(http, &format!("`{prompt}`: Generating..."))
+            .await?;
+
+        issue_generation_task(
+            &self.client,
+            &self.models,
+            self.store.clone(),
+            http,
+            interaction,
+            &sd::GenerationRequest {
+                prompt: prompt.as_str(),
+                negative_prompt: None,
+                seed: None,
+                batch_size: Some(1),
+                batch_count: Some(1),
+                width,
+                height,
+                cfg_scale,
+                steps,
+                tiling,
+                restore_faces,
+                sampler,
+                model,
+                ..Default::default()
+            },
+        )
+        .await
     }
 }
 
@@ -645,10 +719,13 @@ impl EventHandler for Handler {
                             self.mc_interrogate(http, &mci, id, sd::Interrogator::DeepDanbooru)
                                 .await
                         }
-
                         cid::Generation::RetryWithOptionsResponse => Ok(()),
                     },
-                    cid::CustomId::Interrogation { .. } => todo!(),
+                    cid::CustomId::Interrogation { id, interrogation } => match interrogation {
+                        cid::Interrogation::Generate => {
+                            self.mc_interrogate_generate(http, &mci, id).await
+                        }
+                    },
                 }
             }
             Interaction::ModalSubmit(msi) => {
@@ -865,23 +942,51 @@ async fn issue_generation_task(
 async fn issue_interrogate_task(
     client: &sd::Client,
     interaction: &dyn DiscordInteraction,
+    store: Arc<Mutex<Store>>,
     http: &Http,
     image: image::DynamicImage,
-    image_url: Option<&str>,
+    source: store::InterrogationSource,
     interrogator: sd::Interrogator,
 ) -> Result<(), anyhow::Error> {
     let result = client.interrogate(&image, interrogator).await?;
+    let store_key = store
+        .lock()
+        .unwrap()
+        .insert_interrogation(store::Interrogation {
+            user_id: interaction.user().id,
+            source: source.clone(),
+            result: result.clone(),
+            interrogator,
+        })?;
+
     interaction
         .get_interaction_message(http)
         .await?
-        .edit(http, |r| {
-            r.content(format!(
+        .edit(http, |m| {
+            m.content(format!(
                 "`{}` - {}{} for {}",
                 result,
                 interrogator,
-                image_url.map(|s| format!(" on {s}")).unwrap_or_default(),
+                match source {
+                    store::InterrogationSource::GenerationId(_) => String::new(),
+                    store::InterrogationSource::Url(url) => format!(" on {url}"),
+                },
                 interaction.user().mention()
             ))
+            .components(|c| {
+                c.create_action_row(|r| {
+                    r.create_button(|b| {
+                        b.emoji(
+                            consts::emojis::INTERROGATE_GENERATE
+                                .parse::<ReactionType>()
+                                .unwrap(),
+                        )
+                        .label("Generate")
+                        .style(component::ButtonStyle::Secondary)
+                        .custom_id(cid::Interrogation::Generate.to_id(store_key))
+                    })
+                })
+            })
         })
         .await?;
 
