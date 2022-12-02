@@ -130,35 +130,35 @@ impl Handler {
         let width = util::get_value(&aci, consts::value::WIDTH)
             .and_then(util::value_to_int)
             .map(|v| v as u32 / 64 * 64)
-            .or(last_generation.map(|g| g.width));
+            .or_else(|| last_generation.map(|g| g.width));
 
         let height = util::get_value(&aci, consts::value::HEIGHT)
             .and_then(util::value_to_int)
             .map(|v| v as u32 / 64 * 64)
-            .or(last_generation.map(|g| g.height));
+            .or_else(|| last_generation.map(|g| g.height));
 
         let cfg_scale = util::get_value(&aci, consts::value::GUIDANCE_SCALE)
             .and_then(util::value_to_number)
             .map(|v| v as f32)
-            .or(last_generation.map(|g| g.cfg_scale));
+            .or_else(|| last_generation.map(|g| g.cfg_scale));
 
         let steps = util::get_value(&aci, consts::value::STEPS)
             .and_then(util::value_to_int)
             .map(|v| v as u32)
-            .or(last_generation.map(|g| g.steps));
+            .or_else(|| last_generation.map(|g| g.steps));
 
         let tiling = util::get_value(&aci, consts::value::TILING)
             .and_then(util::value_to_bool)
-            .or(last_generation.map(|g| g.tiling));
+            .or_else(|| last_generation.map(|g| g.tiling));
 
         let restore_faces = util::get_value(&aci, consts::value::RESTORE_FACES)
             .and_then(util::value_to_bool)
-            .or(last_generation.map(|g| g.restore_faces));
+            .or_else(|| last_generation.map(|g| g.restore_faces));
 
         let sampler = util::get_value(&aci, consts::value::SAMPLER)
             .and_then(util::value_to_string)
             .and_then(|v| sd::Sampler::try_from(v.as_str()).ok())
-            .or(last_generation.map(|g| g.sampler));
+            .or_else(|| last_generation.map(|g| g.sampler));
 
         let model = {
             let models: Vec<_> = util::get_values_starting_with(&aci, consts::value::MODEL)
@@ -335,7 +335,7 @@ impl Handler {
                 if let component::ActionRowComponent::InputText(it) = c {
                     Some((it.custom_id.clone(), it.value.clone()))
                 } else {
-                    return None;
+                    None
                 }
             })
             .collect();
@@ -756,8 +756,8 @@ async fn issue_generation_task(
     let prompt = request.prompt;
     let negative_prompt = request.negative_prompt;
 
-    // generate and updat eprogress
-    let task = client.generate_image_from_text(&request)?;
+    // generate and update progress
+    let task = client.generate_image_from_text(request)?;
     loop {
         let progress = task.progress().await?;
         let image_bytes = progress

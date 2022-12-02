@@ -6,6 +6,7 @@ const SEPARATOR: &str = "#";
 const GENERATION_PREFIX: &str = "gen";
 const INTERROGATION_PREFIX: &str = "int";
 
+#[derive(Clone, Copy)]
 pub enum Generation {
     Retry,
     RetryWithOptions,
@@ -57,6 +58,7 @@ impl Display for Generation {
     }
 }
 
+#[derive(Clone, Copy)]
 pub enum Interrogation {
     Generate,
 }
@@ -131,14 +133,14 @@ impl Display for CustomId {
                 write!(
                     f,
                     "{GENERATION_PREFIX}{SEPARATOR}{id}{SEPARATOR}{}",
-                    generation.to_string()
+                    generation
                 )
             }
             CustomId::Interrogation { id, interrogation } => {
                 write!(
                     f,
                     "{INTERROGATION_PREFIX}{SEPARATOR}{id}{SEPARATOR}{}",
-                    interrogation.to_string()
+                    interrogation
                 )
             }
         }

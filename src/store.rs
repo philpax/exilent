@@ -198,7 +198,7 @@ impl Generation {
             c::value::RESTORE_FACES,
             self.restore_faces,
             c::value::SAMPLER,
-            self.sampler.to_string(),
+            self.sampler,
             util::find_model_by_hash(models, &self.model_hash)
                 .map(|(idx, m)| {
                     let model_category = idx / c::misc::MODEL_CHUNK_COUNT;
@@ -223,7 +223,7 @@ impl Generation {
     ) -> sd::GenerationRequest<'a> {
         sd::GenerationRequest {
             prompt: self.prompt.as_str(),
-            negative_prompt: self.negative_prompt.as_ref().map(|s| s.as_str()),
+            negative_prompt: self.negative_prompt.as_deref(),
             seed: Some(self.seed),
             batch_size: Some(1),
             batch_count: Some(1),
