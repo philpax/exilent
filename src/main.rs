@@ -265,6 +265,37 @@ impl Handler {
         )
         .await
     }
+
+    async fn png_info(
+        &self,
+        http: &Http,
+        aci: ApplicationCommandInteraction,
+    ) -> anyhow::Result<()> {
+        let image_attachment_url = util::get_value(&aci, constant::value::IMAGE_ATTACHMENT)
+            .and_then(util::value_to_attachment_url);
+
+        let image_url =
+            util::get_value(&aci, constant::value::IMAGE_URL).and_then(util::value_to_string);
+
+        let url = image_attachment_url
+            .or(image_url)
+            .context("expected an image to be passed in")?;
+
+        let interaction: &dyn DiscordInteraction = &aci;
+        interaction
+            .create(http, &format!("Reading PNG info of {url}..."))
+            .await?;
+
+        let bytes = reqwest::get(&url).await?.bytes().await?;
+        let result = self.client.png_info(&bytes).await?;
+        interaction
+            .get_interaction_message(http)
+            .await?
+            .edit(http, |m| m.content(result))
+            .await?;
+
+        Ok(())
+    }
 }
 /// Message component interactions
 impl Handler {
@@ -739,6 +770,26 @@ impl EventHandler for Handler {
         })
         .await
         .unwrap();
+
+        Command::create_global_application_command(&ctx.http, |command| {
+            command
+                .name(constant::command::PNG_INFO)
+                .description("Retrieves the embedded PNG info of an image")
+                .create_option(|option| {
+                    option
+                        .name(constant::value::IMAGE_URL)
+                        .description("The URL of the image to read")
+                        .kind(CommandOptionType::String)
+                })
+                .create_option(|option| {
+                    option
+                        .name(constant::value::IMAGE_ATTACHMENT)
+                        .description("The image to read")
+                        .kind(CommandOptionType::Attachment)
+                })
+        })
+        .await
+        .unwrap();
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
@@ -751,6 +802,7 @@ impl EventHandler for Handler {
                     constant::command::PAINT => self.paint(http, cmd).await,
                     constant::command::INTERROGATE => self.interrogate(http, cmd).await,
                     constant::command::EXILENT => self.exilent(http, cmd).await,
+                    constant::command::PNG_INFO => self.png_info(http, cmd).await,
                     _ => Ok(()),
                 }
             }

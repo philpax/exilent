@@ -10,6 +10,7 @@ pub mod command {
     pub const PAINT: &str = "paint";
     pub const INTERROGATE: &str = "interrogate";
     pub const EXILENT: &str = "exilent";
+    pub const PNG_INFO: &str = "pnginfo";
 }
 
 /// names of values used in interactions
