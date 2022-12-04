@@ -28,6 +28,7 @@ pub mod value {
     pub const MODEL: &str = "model";
 
     pub const IMAGE_URL: &str = "image_url";
+    pub const IMAGE_ATTACHMENT: &str = "image_attachment";
     pub const INTERROGATOR: &str = "interrogator";
 }
 

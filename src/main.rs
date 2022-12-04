@@ -232,9 +232,15 @@ impl Handler {
         http: &Http,
         aci: ApplicationCommandInteraction,
     ) -> anyhow::Result<()> {
-        let image_url = util::get_value(&aci, constant::value::IMAGE_URL)
-            .and_then(util::value_to_string)
-            .context("expected image_url")?;
+        let image_attachment_url = util::get_value(&aci, constant::value::IMAGE_ATTACHMENT)
+            .and_then(util::value_to_attachment_url);
+
+        let image_url =
+            util::get_value(&aci, constant::value::IMAGE_URL).and_then(util::value_to_string);
+
+        let url = image_attachment_url
+            .or(image_url)
+            .context("expected an image to be passed in")?;
 
         let interrogator = util::get_value(&aci, constant::value::INTERROGATOR)
             .and_then(util::value_to_string)
@@ -243,13 +249,10 @@ impl Handler {
 
         let interaction: &dyn DiscordInteraction = &aci;
         interaction
-            .create(
-                http,
-                &format!("Interrogating {image_url} with {interrogator}..."),
-            )
+            .create(http, &format!("Interrogating {url} with {interrogator}..."))
             .await?;
 
-        let bytes = reqwest::get(&image_url).await?.bytes().await?;
+        let bytes = reqwest::get(&url).await?.bytes().await?;
         let image = image::load_from_memory(&bytes)?;
 
         issuer::interrogate_task(
@@ -258,11 +261,7 @@ impl Handler {
             &self.safe_tags,
             interaction,
             http,
-            (
-                image,
-                store::InterrogationSource::Url(image_url),
-                interrogator,
-            ),
+            (image, store::InterrogationSource::Url(url), interrogator),
         )
         .await
     }
@@ -699,13 +698,6 @@ impl EventHandler for Handler {
                 .name(constant::command::INTERROGATE)
                 .description("Interrogates an image to produce a caption")
                 .create_option(|option| {
-                    option
-                        .name(constant::value::IMAGE_URL)
-                        .description("The URL of the image to interrogate")
-                        .kind(CommandOptionType::String)
-                        .required(true)
-                })
-                .create_option(|option| {
                     let opt = option
                         .name(constant::value::INTERROGATOR)
                         .description("The interrogator to use")
@@ -717,6 +709,18 @@ impl EventHandler for Handler {
                     }
 
                     opt
+                })
+                .create_option(|option| {
+                    option
+                        .name(constant::value::IMAGE_URL)
+                        .description("The URL of the image to interrogate")
+                        .kind(CommandOptionType::String)
+                })
+                .create_option(|option| {
+                    option
+                        .name(constant::value::IMAGE_ATTACHMENT)
+                        .description("The image to interrogate")
+                        .kind(CommandOptionType::Attachment)
                 })
         })
         .await

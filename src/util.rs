@@ -67,6 +67,13 @@ pub fn value_to_bool(v: &CommandDataOptionValue) -> Option<bool> {
     }
 }
 
+pub fn value_to_attachment_url(v: &CommandDataOptionValue) -> Option<String> {
+    match v {
+        CommandDataOptionValue::Attachment(v) => Some(v.url.clone()),
+        _ => None,
+    }
+}
+
 pub fn generate_chunked_strings(
     strings: impl Iterator<Item = String>,
     threshold: usize,
