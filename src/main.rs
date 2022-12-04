@@ -232,15 +232,7 @@ impl Handler {
         http: &Http,
         aci: ApplicationCommandInteraction,
     ) -> anyhow::Result<()> {
-        let image_attachment_url = util::get_value(&aci, constant::value::IMAGE_ATTACHMENT)
-            .and_then(util::value_to_attachment_url);
-
-        let image_url =
-            util::get_value(&aci, constant::value::IMAGE_URL).and_then(util::value_to_string);
-
-        let url = image_attachment_url
-            .or(image_url)
-            .context("expected an image to be passed in")?;
+        let url = util::get_image_url(&aci)?;
 
         let interrogator = util::get_value(&aci, constant::value::INTERROGATOR)
             .and_then(util::value_to_string)
@@ -271,15 +263,7 @@ impl Handler {
         http: &Http,
         aci: ApplicationCommandInteraction,
     ) -> anyhow::Result<()> {
-        let image_attachment_url = util::get_value(&aci, constant::value::IMAGE_ATTACHMENT)
-            .and_then(util::value_to_attachment_url);
-
-        let image_url =
-            util::get_value(&aci, constant::value::IMAGE_URL).and_then(util::value_to_string);
-
-        let url = image_attachment_url
-            .or(image_url)
-            .context("expected an image to be passed in")?;
+        let url = util::get_image_url(&aci)?;
 
         let interaction: &dyn DiscordInteraction = &aci;
         interaction
@@ -297,6 +281,7 @@ impl Handler {
         Ok(())
     }
 }
+
 /// Message component interactions
 impl Handler {
     async fn mc_retry(

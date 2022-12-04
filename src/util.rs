@@ -1,3 +1,4 @@
+use anyhow::Context;
 use serenity::{
     async_trait,
     http::Http,
@@ -15,7 +16,7 @@ use serenity::{
     },
 };
 
-use crate::sd;
+use crate::{constant, sd};
 
 pub fn get_value<'a>(
     cmd: &'a ApplicationCommandInteraction,
@@ -72,6 +73,17 @@ pub fn value_to_attachment_url(v: &CommandDataOptionValue) -> Option<String> {
         CommandDataOptionValue::Attachment(v) => Some(v.url.clone()),
         _ => None,
     }
+}
+
+pub fn get_image_url(aci: &ApplicationCommandInteraction) -> anyhow::Result<String> {
+    let image_attachment_url =
+        get_value(aci, constant::value::IMAGE_ATTACHMENT).and_then(value_to_attachment_url);
+
+    let image_url = get_value(aci, constant::value::IMAGE_URL).and_then(value_to_string);
+
+    Ok(image_attachment_url
+        .or(image_url)
+        .context("expected an image to be passed in")?)
 }
 
 pub fn generate_chunked_strings(
