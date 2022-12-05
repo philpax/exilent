@@ -13,20 +13,17 @@ use serenity::{
 use stable_diffusion_a1111_webui_client as sd;
 
 pub async fn generation_task(
-    client: &sd::Client,
+    task: sd::GenerationTask,
     models: &[sd::Model],
     store: &Store,
     http: &Http,
     interaction: &dyn DiscordInteraction,
-    request: &sd::GenerationRequest<'_>,
+    prompt: &str,
+    negative_prompt: Option<&str>,
 ) -> anyhow::Result<()> {
     use constant::misc::{PROGRESS_SCALE_FACTOR, PROGRESS_UPDATE_MS};
 
-    let prompt = request.prompt;
-    let negative_prompt = request.negative_prompt;
-
     // generate and update progress
-    let task = client.generate_image_from_text(request)?;
     loop {
         let progress = task.progress().await?;
         let image_bytes = progress
@@ -47,9 +44,8 @@ pub async fn generation_task(
             .edit(http, |m| {
                 m.content(format!(
                     "`{}`{}: {:.02}% complete. ({:.02} seconds remaining)",
-                    request.prompt,
-                    request
-                        .negative_prompt
+                    prompt,
+                    negative_prompt
                         .map(|s| format!(" - `{s}`"))
                         .unwrap_or_default(),
                     progress.progress_factor * 100.0,
@@ -96,9 +92,8 @@ pub async fn generation_task(
             .edit(http, |m| {
                 m.content(format!(
                     "`{}`{}: Uploading {}/{}...",
-                    request.prompt,
-                    request
-                        .negative_prompt
+                    prompt,
+                    negative_prompt
                         .map(|s| format!(" - `{s}`"))
                         .unwrap_or_default(),
                     idx + 1,

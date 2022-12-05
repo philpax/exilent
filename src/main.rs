@@ -8,6 +8,7 @@ use dotenv::dotenv;
 use rand::seq::SliceRandom;
 use serenity::{
     async_trait,
+    builder::CreateApplicationCommand,
     client::{Context, EventHandler},
     http::Http,
     model::{
@@ -202,27 +203,32 @@ impl Handler {
             .await?;
 
         issuer::generation_task(
-            &self.client,
+            self.client
+                .generate_from_text(&sd::TextToImageGenerationRequest {
+                    base: sd::BaseGenerationRequest {
+                        prompt: prompt.as_str(),
+                        negative_prompt: negative_prompt.as_deref(),
+                        seed,
+                        batch_size: Some(1),
+                        batch_count,
+                        width,
+                        height,
+                        cfg_scale,
+                        steps,
+                        tiling,
+                        restore_faces,
+                        sampler,
+                        model,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                })?,
             &self.models,
             &self.store,
             http,
             interaction,
-            &sd::GenerationRequest {
-                prompt: prompt.as_str(),
-                negative_prompt: negative_prompt.as_deref(),
-                seed,
-                batch_size: Some(1),
-                batch_count,
-                width,
-                height,
-                cfg_scale,
-                steps,
-                tiling,
-                restore_faces,
-                sampler,
-                model,
-                ..Default::default()
-            },
+            &prompt,
+            negative_prompt.as_deref(),
         )
         .await
     }
@@ -397,21 +403,22 @@ impl Handler {
 
         let mut request = generation.as_generation_request(&self.models);
         if let Some(prompt) = prompt {
-            request.prompt = prompt;
+            request.base.prompt = prompt;
         }
         if let Some(negative_prompt) = negative_prompt {
-            request.negative_prompt = Some(negative_prompt).filter(|s| !s.is_empty());
+            request.base.negative_prompt = Some(negative_prompt).filter(|s| !s.is_empty());
         }
         if let Some(seed) = seed {
-            request.seed = seed;
+            request.base.seed = seed;
         }
         interaction
             .create(
                 http,
                 &format!(
                     "`{}`{}: Generating retry...",
-                    request.prompt,
+                    request.base.prompt,
                     request
+                        .base
                         .negative_prompt
                         .map(|s| format!(" - `{s}`"))
                         .unwrap_or_default()
@@ -420,12 +427,13 @@ impl Handler {
             .await?;
 
         issuer::generation_task(
-            &self.client,
+            self.client.generate_from_text(&request)?,
             &self.models,
             &self.store,
             http,
             interaction,
-            &request,
+            &request.base.prompt,
+            request.base.negative_prompt.as_deref(),
         )
         .await?;
 
@@ -551,27 +559,32 @@ impl Handler {
             .await?;
 
         issuer::generation_task(
-            &self.client,
+            self.client
+                .generate_from_text(&sd::TextToImageGenerationRequest {
+                    base: sd::BaseGenerationRequest {
+                        prompt: prompt.as_str(),
+                        negative_prompt: None,
+                        seed: None,
+                        batch_size: Some(1),
+                        batch_count: Some(1),
+                        width,
+                        height,
+                        cfg_scale,
+                        steps,
+                        tiling,
+                        restore_faces,
+                        sampler,
+                        model,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                })?,
             &self.models,
             &self.store,
             http,
             interaction,
-            &sd::GenerationRequest {
-                prompt: prompt.as_str(),
-                negative_prompt: None,
-                seed: None,
-                batch_size: Some(1),
-                batch_count: Some(1),
-                width,
-                height,
-                cfg_scale,
-                steps,
-                tiling,
-                restore_faces,
-                sampler,
-                model,
-                ..Default::default()
-            },
+            &prompt,
+            None,
         )
         .await
     }

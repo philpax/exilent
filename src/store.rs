@@ -220,21 +220,24 @@ impl Generation {
     pub fn as_generation_request<'a>(
         &'a self,
         models: &'a [sd::Model],
-    ) -> sd::GenerationRequest<'a> {
-        sd::GenerationRequest {
-            prompt: self.prompt.as_str(),
-            negative_prompt: self.negative_prompt.as_deref(),
-            seed: Some(self.seed),
-            batch_size: Some(1),
-            batch_count: Some(1),
-            width: Some(self.width),
-            height: Some(self.height),
-            cfg_scale: Some(self.cfg_scale),
-            steps: Some(self.steps),
-            tiling: Some(self.tiling),
-            restore_faces: Some(self.restore_faces),
-            sampler: Some(self.sampler),
-            model: util::find_model_by_hash(models, &self.model_hash).map(|t| t.1),
+    ) -> sd::TextToImageGenerationRequest<'a> {
+        sd::TextToImageGenerationRequest {
+            base: sd::BaseGenerationRequest {
+                prompt: self.prompt.as_str(),
+                negative_prompt: self.negative_prompt.as_deref(),
+                seed: Some(self.seed),
+                batch_size: Some(1),
+                batch_count: Some(1),
+                width: Some(self.width),
+                height: Some(self.height),
+                cfg_scale: Some(self.cfg_scale),
+                steps: Some(self.steps),
+                tiling: Some(self.tiling),
+                restore_faces: Some(self.restore_faces),
+                sampler: Some(self.sampler),
+                model: util::find_model_by_hash(models, &self.model_hash).map(|t| t.1),
+                ..Default::default()
+            },
             ..Default::default()
         }
     }
