@@ -15,23 +15,29 @@ impl Store {
         connection.execute(
             r"
             CREATE TABLE IF NOT EXISTS generation (
-                id	            INTEGER PRIMARY KEY AUTOINCREMENT,
+                id	                INTEGER PRIMARY KEY AUTOINCREMENT,
 
-                prompt	        TEXT NOT NULL,
-                negative_prompt	TEXT,
-                seed	        INTEGER NOT NULL,
-                width	        INTEGER NOT NULL,
-                height	        INTEGER NOT NULL,
-                cfg_scale	    REAL NOT NULL,
-                steps	        INTEGER NOT NULL,
-                tiling	        INTEGER NOT NULL,
-                restore_faces	INTEGER NOT NULL,
-                sampler	        TEXT NOT NULL,
-                model_hash	    TEXT NOT NULL,
-                image	        BLOB NOT NULL,
+                prompt	            TEXT NOT NULL,
+                negative_prompt	    TEXT,
+                seed	            INTEGER NOT NULL,
+                width	            INTEGER NOT NULL,
+                height	            INTEGER NOT NULL,
+                cfg_scale	        REAL NOT NULL,
+                steps	            INTEGER NOT NULL,
+                tiling	            INTEGER NOT NULL,
+                restore_faces	    INTEGER NOT NULL,
+                sampler	            TEXT NOT NULL,
+                model_hash	        TEXT NOT NULL,
+                image	            BLOB NOT NULL,
+                denoising_strength  REAL NOT NULL,
 
-                user_id         TEXT NOT NULL,
-                timestamp	    TEXT NOT NULL
+                user_id             TEXT NOT NULL,
+                timestamp	        TEXT NOT NULL,
+
+                -- img2img specific fields
+                init_image          BLOB,
+                resize_mode         TEXT,
+                init_url            TEXT
             ) STRICT;
             ",
             (),
@@ -65,11 +71,12 @@ impl Store {
             r"
             INSERT INTO generation
                 (prompt, negative_prompt, seed, width, height, cfg_scale, steps, tiling,
-                 restore_faces, sampler, model_hash, image, user_id, timestamp)
+                 restore_faces, sampler, model_hash, image, user_id, timestamp, denoising_strength,
+                 init_image, resize_mode, init_url)
             VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ",
-            (
+            rusqlite::params![
                 g.prompt,
                 g.negative_prompt,
                 g.seed,
@@ -84,7 +91,16 @@ impl Store {
                 g.image,
                 g.user_id.as_u64().to_string(),
                 g.timestamp,
-            ),
+                g.denoising_strength,
+                g.image_generation
+                    .as_ref()
+                    .map(|ig| util::encode_image_to_png_bytes(ig.init_image.clone()))
+                    .transpose()?,
+                g.image_generation
+                    .as_ref()
+                    .map(|ig| ig.resize_mode.to_string()),
+                g.image_generation.as_ref().map(|ig| ig.init_url.as_str()),
+            ],
         )?;
 
         Ok(db.last_insert_rowid())
@@ -155,6 +171,13 @@ impl Store {
 }
 
 #[derive(Debug, Clone)]
+pub struct ImageGeneration {
+    pub init_image: image::DynamicImage,
+    pub init_url: String,
+    pub resize_mode: sd::ResizeMode,
+}
+
+#[derive(Debug, Clone)]
 pub struct Generation {
     pub prompt: String,
     pub negative_prompt: Option<String>,
@@ -170,13 +193,19 @@ pub struct Generation {
     pub image: Vec<u8>,
     pub timestamp: chrono::DateTime<chrono::Local>,
     pub user_id: UserId,
+    pub denoising_strength: f32,
+    pub image_generation: Option<ImageGeneration>,
 }
 impl Generation {
     pub fn as_message(&self, models: &[sd::Model]) -> String {
         use crate::constant as c;
         format!(
-            "`/{} {}:{}{} {}:{} {}:{} {}:{} {}:{} {}:{} {}:{} {}:{} {}:{}{}`",
-            c::command::PAINT,
+            "`/{} {}:{}{} {}:{} {}:{} {}:{} {}:{} {}:{} {}:{} {}:{} {}:{} {}:{}{}{}`",
+            if self.image_generation.is_some() {
+                c::command::PAINTOVER
+            } else {
+                c::command::PAINT
+            },
             c::value::PROMPT,
             self.prompt,
             self.negative_prompt
@@ -199,6 +228,8 @@ impl Generation {
             self.restore_faces,
             c::value::SAMPLER,
             self.sampler,
+            c::value::DENOISING_STRENGTH,
+            self.denoising_strength,
             util::find_model_by_hash(models, &self.model_hash)
                 .map(|(idx, m)| {
                     let model_category = idx / c::misc::MODEL_CHUNK_COUNT;
@@ -213,32 +244,73 @@ impl Generation {
                         m.name
                     )
                 })
+                .unwrap_or_default(),
+            self.image_generation
+                .as_ref()
+                .map(|ig| {
+                    format!(
+                        " {}:{} {}:{}",
+                        c::value::IMAGE_URL,
+                        ig.init_url,
+                        c::value::RESIZE_MODE,
+                        ig.resize_mode
+                    )
+                })
                 .unwrap_or_default()
         )
     }
 
-    pub fn as_generation_request<'a>(
-        &'a self,
-        models: &'a [sd::Model],
-    ) -> sd::TextToImageGenerationRequest<'a> {
-        sd::TextToImageGenerationRequest {
-            base: sd::BaseGenerationRequest {
-                prompt: self.prompt.as_str(),
-                negative_prompt: self.negative_prompt.as_deref(),
-                seed: Some(self.seed),
-                batch_size: Some(1),
-                batch_count: Some(1),
-                width: Some(self.width),
-                height: Some(self.height),
-                cfg_scale: Some(self.cfg_scale),
-                steps: Some(self.steps),
-                tiling: Some(self.tiling),
-                restore_faces: Some(self.restore_faces),
-                sampler: Some(self.sampler),
-                model: util::find_model_by_hash(models, &self.model_hash).map(|t| t.1),
-                ..Default::default()
-            },
+    pub fn as_generation_request<'a>(&'a self, models: &'a [sd::Model]) -> GenerationRequest<'a> {
+        let base = sd::BaseGenerationRequest {
+            prompt: self.prompt.as_str(),
+            negative_prompt: self.negative_prompt.as_deref(),
+            seed: Some(self.seed),
+            batch_size: Some(1),
+            batch_count: Some(1),
+            width: Some(self.width),
+            height: Some(self.height),
+            cfg_scale: Some(self.cfg_scale),
+            steps: Some(self.steps),
+            tiling: Some(self.tiling),
+            restore_faces: Some(self.restore_faces),
+            sampler: Some(self.sampler),
+            model: util::find_model_by_hash(models, &self.model_hash).map(|t| t.1),
+            denoising_strength: Some(self.denoising_strength),
             ..Default::default()
+        };
+
+        if let Some(image_generation) = &self.image_generation {
+            GenerationRequest::Image(sd::ImageToImageGenerationRequest {
+                base,
+                resize_mode: Some(image_generation.resize_mode),
+                images: vec![&image_generation.init_image],
+                ..Default::default()
+            })
+        } else {
+            GenerationRequest::Text(sd::TextToImageGenerationRequest {
+                base,
+                ..Default::default()
+            })
+        }
+    }
+}
+
+pub enum GenerationRequest<'a> {
+    Text(sd::TextToImageGenerationRequest<'a>),
+    Image(sd::ImageToImageGenerationRequest<'a>),
+}
+impl<'b> GenerationRequest<'b> {
+    pub fn base(&self) -> &sd::BaseGenerationRequest<'_> {
+        match self {
+            GenerationRequest::Text(r) => &r.base,
+            GenerationRequest::Image(r) => &r.base,
+        }
+    }
+
+    pub fn generate(&self, client: &sd::Client) -> sd::Result<sd::GenerationTask> {
+        match self {
+            GenerationRequest::Text(r) => client.generate_from_text(r),
+            GenerationRequest::Image(r) => client.generate_from_image_and_text(r),
         }
     }
 }
@@ -307,7 +379,7 @@ impl Store {
         params: impl rusqlite::Params,
     ) -> anyhow::Result<Option<Generation>> {
         let db = &mut *self.0.lock().unwrap();
-        let Some((
+        let (
             prompt,
             negative_prompt,
             seed,
@@ -322,12 +394,18 @@ impl Store {
             image,
             user_id,
             timestamp,
-        )) = db.query_row::<(_, _, _, _, _, _, _, _, _, String, _, _, String, _), _, _>(
+            denoising_strength,
+            init_image,
+            resize_mode,
+            init_url,
+        ) = db
+            .query_row(
                 &format!(
                     r"
                     SELECT
                         prompt, negative_prompt, seed, width, height, cfg_scale, steps, tiling,
-                        restore_faces, sampler, model_hash, image, user_id, timestamp
+                        restore_faces, sampler, model_hash, image, user_id, timestamp,
+                        denoising_strength, init_image, resize_mode, init_url
                     FROM
                         generation
                     WHERE
@@ -338,9 +416,50 @@ impl Store {
                     predicate
                 ),
                 params,
-                |r| r.try_into(),
+                |r| {
+                    let prompt: String = r.get(0)?;
+                    let negative_prompt: Option<String> = r.get(1)?;
+                    let seed: i64 = r.get(2)?;
+                    let width: u32 = r.get(3)?;
+                    let height: u32 = r.get(4)?;
+                    let cfg_scale: f32 = r.get(5)?;
+                    let steps: u32 = r.get(6)?;
+                    let tiling: bool = r.get(7)?;
+                    let restore_faces: bool = r.get(8)?;
+                    let sampler: String = r.get(9)?;
+                    let model_hash: String = r.get(10)?;
+                    let image: Vec<u8> = r.get(11)?;
+                    let user_id: String = r.get(12)?;
+                    let timestamp: chrono::DateTime<chrono::Local> = r.get(13)?;
+                    let denoising_strength: f32 = r.get(14)?;
+                    let init_image: Option<Vec<u8>> = r.get(15)?;
+                    let resize_mode: Option<String> = r.get(16)?;
+                    let init_url: Option<String> = r.get(17)?;
+
+                    Ok((
+                        prompt,
+                        negative_prompt,
+                        seed,
+                        width,
+                        height,
+                        cfg_scale,
+                        steps,
+                        tiling,
+                        restore_faces,
+                        sampler,
+                        model_hash,
+                        image,
+                        user_id,
+                        timestamp,
+                        denoising_strength,
+                        init_image,
+                        resize_mode,
+                        init_url,
+                    ))
+                },
             )
-            .optional()? else { return Ok(None); };
+            .optional()?
+            .unwrap();
 
         Ok(Some(Generation {
             prompt,
@@ -359,6 +478,20 @@ impl Store {
             image,
             timestamp,
             user_id: UserId(user_id.parse()?),
+            denoising_strength,
+            image_generation: init_image
+                .zip(resize_mode)
+                .zip(init_url)
+                .map(|((init_image, resize_mode), init_url)| {
+                    anyhow::Ok(ImageGeneration {
+                        init_image: image::load_from_memory(&init_image)?,
+                        init_url,
+                        resize_mode: sd::ResizeMode::try_from(resize_mode.as_str())
+                            .ok()
+                            .context("invalid resize mode")?,
+                    })
+                })
+                .transpose()?,
         }))
     }
 }

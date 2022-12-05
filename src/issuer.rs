@@ -18,8 +18,8 @@ pub async fn generation_task(
     store: &Store,
     http: &Http,
     interaction: &dyn DiscordInteraction,
-    prompt: &str,
-    negative_prompt: Option<&str>,
+    (prompt, negative_prompt): (&str, Option<&str>),
+    image_generation: Option<store::ImageGeneration>,
 ) -> anyhow::Result<()> {
     use constant::misc::{PROGRESS_SCALE_FACTOR, PROGRESS_UPDATE_MS};
 
@@ -43,10 +43,14 @@ pub async fn generation_task(
             .await?
             .edit(http, |m| {
                 m.content(format!(
-                    "`{}`{}: {:.02}% complete. ({:.02} seconds remaining)",
+                    "`{}`{}{}: {:.02}% complete. ({:.02} seconds remaining)",
                     prompt,
                     negative_prompt
                         .map(|s| format!(" - `{s}`"))
+                        .unwrap_or_default(),
+                    image_generation
+                        .as_ref()
+                        .map(|ig| format!(" for {}", ig.init_url))
                         .unwrap_or_default(),
                     progress.progress_factor * 100.0,
                     progress.eta_seconds
@@ -119,6 +123,8 @@ pub async fn generation_task(
             image: bytes.clone(),
             timestamp: result.info.job_timestamp,
             user_id: interaction.user().id,
+            denoising_strength: result.info.denoising_strength,
+            image_generation: image_generation.clone(),
         };
         let message = format!(
             "{} - {}",

@@ -8,6 +8,7 @@ pub mod config {
 /// discord command names
 pub mod command {
     pub const PAINT: &str = "paint";
+    pub const PAINTOVER: &str = "paintover";
     pub const INTERROGATE: &str = "interrogate";
     pub const EXILENT: &str = "exilent";
     pub const PNG_INFO: &str = "pnginfo";
@@ -27,6 +28,9 @@ pub mod value {
     pub const RESTORE_FACES: &str = "restore_faces";
     pub const SAMPLER: &str = "sampler";
     pub const MODEL: &str = "model";
+    pub const DENOISING_STRENGTH: &str = "denoising_strength";
+
+    pub const RESIZE_MODE: &str = "resize_mode";
 
     pub const IMAGE_URL: &str = "image_url";
     pub const IMAGE_ATTACHMENT: &str = "image_attachment";

@@ -118,83 +118,17 @@ impl Handler {
 
     async fn paint(&self, http: &Http, aci: ApplicationCommandInteraction) -> anyhow::Result<()> {
         let interaction: &dyn DiscordInteraction = &aci;
-
-        // always applied
-        let prompt = util::get_value(&aci, constant::value::PROMPT)
-            .and_then(util::value_to_string)
-            .context("expected prompt")?;
-
-        let negative_prompt =
-            util::get_value(&aci, constant::value::NEGATIVE_PROMPT).and_then(util::value_to_string);
-
-        let seed = util::get_value(&aci, constant::value::SEED).and_then(util::value_to_int);
-
-        let batch_count = util::get_value(&aci, constant::value::COUNT)
-            .and_then(util::value_to_int)
-            .map(|v| v as u32);
-
-        // use last generation as default if available
-        let last_generation = self.store.get_last_generation_for_user(aci.user.id)?;
-        let last_generation = last_generation.as_ref();
-
-        let width = util::get_value(&aci, constant::value::WIDTH)
-            .and_then(util::value_to_int)
-            .map(|v| v as u32 / 64 * 64)
-            .or_else(|| last_generation.map(|g| g.width));
-
-        let height = util::get_value(&aci, constant::value::HEIGHT)
-            .and_then(util::value_to_int)
-            .map(|v| v as u32 / 64 * 64)
-            .or_else(|| last_generation.map(|g| g.height));
-
-        let cfg_scale = util::get_value(&aci, constant::value::GUIDANCE_SCALE)
-            .and_then(util::value_to_number)
-            .map(|v| v as f32)
-            .or_else(|| last_generation.map(|g| g.cfg_scale));
-
-        let steps = util::get_value(&aci, constant::value::STEPS)
-            .and_then(util::value_to_int)
-            .map(|v| v as u32)
-            .or_else(|| last_generation.map(|g| g.steps));
-
-        let tiling = util::get_value(&aci, constant::value::TILING)
-            .and_then(util::value_to_bool)
-            .or_else(|| last_generation.map(|g| g.tiling));
-
-        let restore_faces = util::get_value(&aci, constant::value::RESTORE_FACES)
-            .and_then(util::value_to_bool)
-            .or_else(|| last_generation.map(|g| g.restore_faces));
-
-        let sampler = util::get_value(&aci, constant::value::SAMPLER)
-            .and_then(util::value_to_string)
-            .and_then(|v| sd::Sampler::try_from(v.as_str()).ok())
-            .or_else(|| last_generation.map(|g| g.sampler));
-
-        let model = {
-            let models: Vec<_> = util::get_values_starting_with(&aci, constant::value::MODEL)
-                .flat_map(util::value_to_string)
-                .collect();
-            if models.len() > 1 {
-                anyhow::bail!("more than one model specified: {:?}", models);
-            }
-
-            models
-                .first()
-                .and_then(|v| self.models.iter().find(|m| m.title == *v))
-                .or_else(|| {
-                    last_generation.and_then(|g| {
-                        util::find_model_by_hash(&self.models, &g.model_hash).map(|t| t.1)
-                    })
-                })
-        };
+        let base_parameters =
+            util::OwnedBaseGenerationParameters::load(&aci, &self.store, &self.models)?;
 
         interaction
             .create(
                 http,
                 &format!(
                     "`{}`{}: Generating...",
-                    &prompt,
-                    negative_prompt
+                    &base_parameters.prompt,
+                    base_parameters
+                        .negative_prompt
                         .as_deref()
                         .map(|s| format!(" - `{s}`"))
                         .unwrap_or_default()
@@ -205,30 +139,76 @@ impl Handler {
         issuer::generation_task(
             self.client
                 .generate_from_text(&sd::TextToImageGenerationRequest {
-                    base: sd::BaseGenerationRequest {
-                        prompt: prompt.as_str(),
-                        negative_prompt: negative_prompt.as_deref(),
-                        seed,
-                        batch_size: Some(1),
-                        batch_count,
-                        width,
-                        height,
-                        cfg_scale,
-                        steps,
-                        tiling,
-                        restore_faces,
-                        sampler,
-                        model,
-                        ..Default::default()
-                    },
+                    base: base_parameters.as_base_generation_request(),
                     ..Default::default()
                 })?,
             &self.models,
             &self.store,
             http,
             interaction,
-            &prompt,
-            negative_prompt.as_deref(),
+            (
+                &base_parameters.prompt,
+                base_parameters.negative_prompt.as_deref(),
+            ),
+            None,
+        )
+        .await
+    }
+
+    async fn paintover(
+        &self,
+        http: &Http,
+        aci: ApplicationCommandInteraction,
+    ) -> anyhow::Result<()> {
+        let interaction: &dyn DiscordInteraction = &aci;
+        let base_parameters =
+            util::OwnedBaseGenerationParameters::load(&aci, &self.store, &self.models)?;
+        let url = util::get_image_url(&aci)?;
+        let resize_mode = util::get_value(&aci, constant::value::RESIZE_MODE)
+            .and_then(util::value_to_string)
+            .and_then(|s| sd::ResizeMode::try_from(s.as_str()).ok())
+            .unwrap_or_default();
+
+        interaction
+            .create(
+                http,
+                &format!(
+                    "`{}`{}: Painting over {}...",
+                    &base_parameters.prompt,
+                    base_parameters
+                        .negative_prompt
+                        .as_deref()
+                        .map(|s| format!(" - `{s}`"))
+                        .unwrap_or_default(),
+                    url
+                ),
+            )
+            .await?;
+
+        let bytes = reqwest::get(&url).await?.bytes().await?;
+        let image = image::load_from_memory(&bytes)?;
+
+        issuer::generation_task(
+            self.client
+                .generate_from_image_and_text(&sd::ImageToImageGenerationRequest {
+                    base: base_parameters.as_base_generation_request(),
+                    images: vec![&image],
+                    resize_mode: Some(resize_mode),
+                    ..Default::default()
+                })?,
+            &self.models,
+            &self.store,
+            http,
+            interaction,
+            (
+                &base_parameters.prompt,
+                base_parameters.negative_prompt.as_deref(),
+            ),
+            Some(store::ImageGeneration {
+                init_image: image.clone(),
+                init_url: url.clone(),
+                resize_mode,
+            }),
         )
         .await
     }
@@ -402,23 +382,29 @@ impl Handler {
             .clone();
 
         let mut request = generation.as_generation_request(&self.models);
-        if let Some(prompt) = prompt {
-            request.base.prompt = prompt;
-        }
-        if let Some(negative_prompt) = negative_prompt {
-            request.base.negative_prompt = Some(negative_prompt).filter(|s| !s.is_empty());
-        }
-        if let Some(seed) = seed {
-            request.base.seed = seed;
+        {
+            let base = match &mut request {
+                store::GenerationRequest::Text(r) => &mut r.base,
+                store::GenerationRequest::Image(r) => &mut r.base,
+            };
+            if let Some(prompt) = prompt {
+                base.prompt = prompt;
+            }
+            if let Some(negative_prompt) = negative_prompt {
+                base.negative_prompt = Some(negative_prompt).filter(|s| !s.is_empty());
+            }
+            if let Some(seed) = seed {
+                base.seed = seed;
+            }
         }
         interaction
             .create(
                 http,
                 &format!(
                     "`{}`{}: Generating retry...",
-                    request.base.prompt,
+                    request.base().prompt,
                     request
-                        .base
+                        .base()
                         .negative_prompt
                         .map(|s| format!(" - `{s}`"))
                         .unwrap_or_default()
@@ -427,13 +413,16 @@ impl Handler {
             .await?;
 
         issuer::generation_task(
-            self.client.generate_from_text(&request)?,
+            request.generate(&self.client)?,
             &self.models,
             &self.store,
             http,
             interaction,
-            &request.base.prompt,
-            request.base.negative_prompt.as_deref(),
+            (
+                &request.base().prompt,
+                request.base().negative_prompt.as_deref(),
+            ),
+            generation.image_generation.clone(),
         )
         .await?;
 
@@ -583,7 +572,7 @@ impl Handler {
             &self.store,
             http,
             interaction,
-            &prompt,
+            (&prompt, None),
             None,
         )
         .await
@@ -598,126 +587,45 @@ impl EventHandler for Handler {
         Command::create_global_application_command(&ctx.http, |command| {
             command
                 .name(constant::command::PAINT)
-                .description("Paints your dreams")
+                .description("Paints your dreams");
+
+            populate_generate_options(command, &self.models);
+            command
+        })
+        .await
+        .unwrap();
+
+        Command::create_global_application_command(&ctx.http, |command| {
+            command
+                .name(constant::command::PAINTOVER)
+                .description("Paints your dreams over another image");
+
+            populate_generate_options(command, &self.models);
+            command
                 .create_option(|option| {
                     option
-                        .name(constant::value::PROMPT)
-                        .description("The prompt to draw")
+                        .name(constant::value::IMAGE_URL)
+                        .description("The URL of the image to paint over")
                         .kind(CommandOptionType::String)
-                        .required(true)
                 })
                 .create_option(|option| {
                     option
-                        .name(constant::value::NEGATIVE_PROMPT)
-                        .description("The prompt to avoid drawing")
-                        .kind(CommandOptionType::String)
-                        .required(false)
-                })
-                .create_option(|option| {
-                    option
-                        .name(constant::value::SEED)
-                        .description("The seed to use")
-                        .kind(CommandOptionType::Integer)
-                        .required(false)
-                })
-                .create_option(|option| {
-                    option
-                        .name(constant::value::COUNT)
-                        .description("The number of images to generate")
-                        .kind(CommandOptionType::Integer)
-                        .min_int_value(constant::limits::COUNT_MIN)
-                        .max_int_value(constant::limits::COUNT_MAX)
-                        .required(false)
-                })
-                .create_option(|option| {
-                    option
-                        .name(constant::value::WIDTH)
-                        .description("The width of the image")
-                        .kind(CommandOptionType::Integer)
-                        .min_int_value(constant::limits::WIDTH_MIN)
-                        .max_int_value(constant::limits::WIDTH_MAX)
-                        .required(false)
-                })
-                .create_option(|option| {
-                    option
-                        .name(constant::value::HEIGHT)
-                        .description("The height of the image")
-                        .kind(CommandOptionType::Integer)
-                        .min_int_value(constant::limits::HEIGHT_MIN)
-                        .max_int_value(constant::limits::HEIGHT_MAX)
-                        .required(false)
-                })
-                .create_option(|option| {
-                    option
-                        .name(constant::value::GUIDANCE_SCALE)
-                        .description("The scale of the guidance to apply")
-                        .kind(CommandOptionType::Number)
-                        .min_number_value(constant::limits::GUIDANCE_SCALE_MIN)
-                        .max_number_value(constant::limits::GUIDANCE_SCALE_MAX)
-                        .required(false)
-                })
-                .create_option(|option| {
-                    option
-                        .name(constant::value::STEPS)
-                        .description("The number of denoising steps to apply")
-                        .kind(CommandOptionType::Integer)
-                        .min_int_value(constant::limits::STEPS_MIN)
-                        .max_int_value(constant::limits::STEPS_MAX)
-                        .required(false)
-                })
-                .create_option(|option| {
-                    option
-                        .name(constant::value::TILING)
-                        .description("Whether or not the image should be tiled at the edges")
-                        .kind(CommandOptionType::Boolean)
-                        .required(false)
-                })
-                .create_option(|option| {
-                    option
-                        .name(constant::value::RESTORE_FACES)
-                        .description("Whether or not the image should have its faces restored")
-                        .kind(CommandOptionType::Boolean)
-                        .required(false)
+                        .name(constant::value::IMAGE_ATTACHMENT)
+                        .description("The image to paint over")
+                        .kind(CommandOptionType::Attachment)
                 })
                 .create_option(|option| {
                     let opt = option
-                        .name(constant::value::SAMPLER)
-                        .description("The sampler to use")
-                        .kind(CommandOptionType::String)
-                        .required(false);
+                        .name(constant::value::RESIZE_MODE)
+                        .description("How to resize the image to match the generation")
+                        .kind(CommandOptionType::String);
 
-                    for value in sd::Sampler::VALUES {
+                    for value in sd::ResizeMode::VALUES {
                         opt.add_string_choice(value, value);
                     }
 
                     opt
-                });
-
-            for (idx, chunk) in self
-                .models
-                .chunks(constant::misc::MODEL_CHUNK_COUNT)
-                .enumerate()
-            {
-                command.create_option(|option| {
-                    let opt = option
-                        .name(if idx == 0 {
-                            constant::value::MODEL.to_string()
-                        } else {
-                            format!("{}{}", constant::value::MODEL, idx + 1)
-                        })
-                        .description(format!("The model to use, category {}", idx + 1))
-                        .kind(CommandOptionType::String)
-                        .required(false);
-
-                    for model in chunk {
-                        opt.add_string_choice(&model.name, &model.title);
-                    }
-
-                    opt
-                });
-            }
-
-            command
+                })
         })
         .await
         .unwrap();
@@ -798,6 +706,7 @@ impl EventHandler for Handler {
                 channel_id = Some(cmd.channel_id);
                 match cmd.data.name.as_str() {
                     constant::command::PAINT => self.paint(http, cmd).await,
+                    constant::command::PAINTOVER => self.paintover(http, cmd).await,
                     constant::command::INTERROGATE => self.interrogate(http, cmd).await,
                     constant::command::EXILENT => self.exilent(http, cmd).await,
                     constant::command::PNG_INFO => self.png_info(http, cmd).await,
@@ -883,5 +792,133 @@ impl EventHandler for Handler {
                 result.unwrap();
             }
         }
+    }
+}
+
+fn populate_generate_options(command: &mut CreateApplicationCommand, models: &[sd::Model]) {
+    command
+        .create_option(|option| {
+            option
+                .name(constant::value::PROMPT)
+                .description("The prompt to draw")
+                .kind(CommandOptionType::String)
+                .required(true)
+        })
+        .create_option(|option| {
+            option
+                .name(constant::value::NEGATIVE_PROMPT)
+                .description("The prompt to avoid drawing")
+                .kind(CommandOptionType::String)
+                .required(false)
+        })
+        .create_option(|option| {
+            option
+                .name(constant::value::SEED)
+                .description("The seed to use")
+                .kind(CommandOptionType::Integer)
+                .required(false)
+        })
+        .create_option(|option| {
+            option
+                .name(constant::value::COUNT)
+                .description("The number of images to generate")
+                .kind(CommandOptionType::Integer)
+                .min_int_value(constant::limits::COUNT_MIN)
+                .max_int_value(constant::limits::COUNT_MAX)
+                .required(false)
+        })
+        .create_option(|option| {
+            option
+                .name(constant::value::WIDTH)
+                .description("The width of the image")
+                .kind(CommandOptionType::Integer)
+                .min_int_value(constant::limits::WIDTH_MIN)
+                .max_int_value(constant::limits::WIDTH_MAX)
+                .required(false)
+        })
+        .create_option(|option| {
+            option
+                .name(constant::value::HEIGHT)
+                .description("The height of the image")
+                .kind(CommandOptionType::Integer)
+                .min_int_value(constant::limits::HEIGHT_MIN)
+                .max_int_value(constant::limits::HEIGHT_MAX)
+                .required(false)
+        })
+        .create_option(|option| {
+            option
+                .name(constant::value::GUIDANCE_SCALE)
+                .description("The scale of the guidance to apply")
+                .kind(CommandOptionType::Number)
+                .min_number_value(constant::limits::GUIDANCE_SCALE_MIN)
+                .max_number_value(constant::limits::GUIDANCE_SCALE_MAX)
+                .required(false)
+        })
+        .create_option(|option| {
+            option
+                .name(constant::value::STEPS)
+                .description("The number of denoising steps to apply")
+                .kind(CommandOptionType::Integer)
+                .min_int_value(constant::limits::STEPS_MIN)
+                .max_int_value(constant::limits::STEPS_MAX)
+                .required(false)
+        })
+        .create_option(|option| {
+            option
+                .name(constant::value::TILING)
+                .description("Whether or not the image should be tiled at the edges")
+                .kind(CommandOptionType::Boolean)
+                .required(false)
+        })
+        .create_option(|option| {
+            option
+                .name(constant::value::RESTORE_FACES)
+                .description("Whether or not the image should have its faces restored")
+                .kind(CommandOptionType::Boolean)
+                .required(false)
+        })
+        .create_option(|option| {
+            option
+                .name(constant::value::DENOISING_STRENGTH)
+                .description(
+                    "The amount of denoising to apply (0 is no change, 1 is complete remake)",
+                )
+                .kind(CommandOptionType::Number)
+                .min_number_value(0.0)
+                .max_number_value(1.0)
+                .required(false)
+        })
+        .create_option(|option| {
+            let opt = option
+                .name(constant::value::SAMPLER)
+                .description("The sampler to use")
+                .kind(CommandOptionType::String)
+                .required(false);
+
+            for value in sd::Sampler::VALUES {
+                opt.add_string_choice(value, value);
+            }
+
+            opt
+        });
+
+    for (idx, chunk) in models.chunks(constant::misc::MODEL_CHUNK_COUNT).enumerate() {
+        command.create_option(|option| {
+            let opt = option
+                .name(if idx == 0 {
+                    constant::value::MODEL.to_string()
+                } else {
+                    format!("{}{}", constant::value::MODEL, idx + 1)
+                })
+                .description(format!("The model to use, category {}", idx + 1))
+                .kind(CommandOptionType::String)
+                .required(false);
+
+            for model in chunk {
+                opt.add_string_choice(&model.name, &model.title);
+            }
+
+            opt
+        });
     }
 }
