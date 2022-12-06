@@ -92,20 +92,21 @@ struct Handler {
 impl Handler {
     async fn exilent(&self, http: &Http, cmd: ApplicationCommandInteraction) -> anyhow::Result<()> {
         let channel = cmd.channel_id;
+        cmd.create_interaction_response(http, |response| {
+            response
+                .kind(InteractionResponseType::ChannelMessageWithSource)
+                .interaction_response_data(|message| {
+                    message.title("Embeddings").content("Processing...")
+                })
+        })
+        .await?;
         let texts = match self.client.embeddings().await {
             Ok(embeddings) => {
                 util::generate_chunked_strings(embeddings.iter().map(|s| format!("`{s}`")), 1900)
             }
             Err(err) => vec![format!("{err:?}")],
         };
-        cmd.create_interaction_response(http, |response| {
-            response
-                .kind(InteractionResponseType::ChannelMessageWithSource)
-                .interaction_response_data(|message| {
-                    message.title("Embeddings").content(texts.first().unwrap())
-                })
-        })
-        .await?;
+        cmd.edit(http, texts.first().unwrap()).await?;
 
         for remainder in texts.iter().skip(1) {
             channel
