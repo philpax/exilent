@@ -91,10 +91,9 @@ pub async fn generation_task(
     for (idx, ((filename, bytes), seed)) in images.iter().zip(result.info.seeds.iter()).enumerate()
     {
         interaction
-            .get_interaction_message(http)
-            .await?
-            .edit(http, |m| {
-                m.content(format!(
+            .edit(
+                http,
+                &format!(
                     "`{}`{}: Uploading {}/{}...",
                     prompt,
                     negative_prompt
@@ -102,8 +101,8 @@ pub async fn generation_task(
                         .unwrap_or_default(),
                     idx + 1,
                     images.len()
-                ))
-            })
+                ),
+            )
             .await?;
 
         let generation = store::Generation {

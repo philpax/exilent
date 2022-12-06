@@ -256,6 +256,7 @@ pub fn encode_image_to_png_bytes(image: image::DynamicImage) -> anyhow::Result<V
 pub trait DiscordInteraction: Send + Sync {
     async fn create(&self, http: &Http, message: &str) -> anyhow::Result<()>;
     async fn get_interaction_message(&self, http: &Http) -> anyhow::Result<Message>;
+    async fn edit(&self, http: &Http, message: &str) -> anyhow::Result<()>;
 
     fn channel_id(&self) -> ChannelId;
     fn message(&self) -> Option<&Message>;
@@ -276,6 +277,13 @@ macro_rules! implement_interaction {
             }
             async fn get_interaction_message(&self, http: &Http) -> anyhow::Result<Message> {
                 Ok(self.get_interaction_response(http).await?)
+            }
+            async fn edit(&self, http: &Http, message: &str) -> anyhow::Result<()> {
+                Ok(self
+                    .get_interaction_message(http)
+                    .await?
+                    .edit(http, |m| m.content(message))
+                    .await?)
             }
 
             fn channel_id(&self) -> ChannelId {

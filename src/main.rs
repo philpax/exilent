@@ -118,11 +118,14 @@ impl Handler {
 
     async fn paint(&self, http: &Http, aci: ApplicationCommandInteraction) -> anyhow::Result<()> {
         let interaction: &dyn DiscordInteraction = &aci;
+        interaction
+            .create(http, "Paint request received, processing...")
+            .await?;
         let base_parameters =
             util::OwnedBaseGenerationParameters::load(&aci, &self.store, &self.models)?;
 
         interaction
-            .create(
+            .edit(
                 http,
                 &format!(
                     "`{}`{}: Generating...",
@@ -161,6 +164,9 @@ impl Handler {
         aci: ApplicationCommandInteraction,
     ) -> anyhow::Result<()> {
         let interaction: &dyn DiscordInteraction = &aci;
+        interaction
+            .create(http, "Paintover request received, processing...")
+            .await?;
         let base_parameters =
             util::OwnedBaseGenerationParameters::load(&aci, &self.store, &self.models)?;
         let url = util::get_image_url(&aci)?;
@@ -170,7 +176,7 @@ impl Handler {
             .unwrap_or_default();
 
         interaction
-            .create(
+            .edit(
                 http,
                 &format!(
                     "`{}`{}: Painting over {}...",
@@ -258,11 +264,7 @@ impl Handler {
 
         let bytes = reqwest::get(&url).await?.bytes().await?;
         let result = self.client.png_info(&bytes).await?;
-        interaction
-            .get_interaction_message(http)
-            .await?
-            .edit(http, |m| m.content(result))
-            .await?;
+        interaction.edit(http, &result).await?;
 
         Ok(())
     }
@@ -375,6 +377,9 @@ impl Handler {
         // None: don't override; Some(None): override with a fresh seed; Some(Some(seed)): override with seed
         seed: Option<Option<i64>>,
     ) -> anyhow::Result<()> {
+        interaction
+            .create(http, "Retry request received, processing...")
+            .await?;
         let generation = self
             .store
             .get_generation(id)?
@@ -398,7 +403,7 @@ impl Handler {
             }
         }
         interaction
-            .create(
+            .edit(
                 http,
                 &format!(
                     "`{}`{}: Generating retry...",
@@ -512,6 +517,12 @@ impl Handler {
         interaction: &dyn DiscordInteraction,
         id: i64,
     ) -> anyhow::Result<()> {
+        interaction
+            .create(
+                http,
+                "Interrogation generation request received, processing...",
+            )
+            .await?;
         let interrogation = self
             .store
             .get_interrogation(id)?
@@ -544,7 +555,7 @@ impl Handler {
             .and_then(|g| util::find_model_by_hash(&self.models, &g.model_hash).map(|t| t.1));
 
         interaction
-            .create(http, &format!("`{prompt}`: Generating..."))
+            .edit(http, &format!("`{prompt}`: Generating..."))
             .await?;
 
         issuer::generation_task(
