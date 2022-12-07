@@ -52,6 +52,7 @@ pub mod emojis {
     pub const RETRY: &str = "🔃";
     pub const RETRY_WITH_OPTIONS: &str = "↪️";
     pub const REMIX: &str = "🔀";
+    pub const UPSCALE: &str = "↔";
     pub const INTERROGATE_WITH_CLIP: &str = "📋";
     pub const INTERROGATE_WITH_DEEPDANBOORU: &str = "🧊";
 

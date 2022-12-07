@@ -148,7 +148,7 @@ pub async fn generation_task(
                         })
                         .create_button(|b| {
                             b.emoji(E::RETRY_WITH_OPTIONS.parse::<ReactionType>().unwrap())
-                                .label("Retry with options")
+                                .label("Retry (options)")
                                 .style(component::ButtonStyle::Secondary)
                                 .custom_id(cid::Generation::RetryWithOptions.to_id(store_key))
                         })
@@ -157,6 +157,12 @@ pub async fn generation_task(
                                 .label("Remix")
                                 .style(component::ButtonStyle::Secondary)
                                 .custom_id(cid::Generation::Remix.to_id(store_key))
+                        })
+                        .create_button(|b| {
+                            b.emoji(E::UPSCALE.parse::<ReactionType>().unwrap())
+                                .label("Upscale (ESRGAN 2x)")
+                                .style(component::ButtonStyle::Secondary)
+                                .custom_id(cid::Generation::Upscale.to_id(store_key))
                         })
                     })
                     .create_action_row(|r| {

@@ -442,6 +442,53 @@ impl Handler {
         self.mc_reissue_response_impl(http, msi, id, true).await
     }
 
+    async fn mc_upscale(
+        &self,
+        http: &Http,
+        mci: &MessageComponentInteraction,
+        id: i64,
+    ) -> anyhow::Result<()> {
+        mci.create(http, "Postprocess request received, processing...")
+            .await?;
+
+        let (image, url) = self
+            .store
+            .get_generation(id)?
+            .map(|g| (g.image, g.image_url))
+            .context("generation not found")?;
+
+        let image = image::load_from_memory(&image)?;
+        let url = url.as_deref().unwrap_or("unknown");
+
+        mci.edit(http, &format!("Postprocessing {url}...")).await?;
+
+        let result = self
+            .client
+            .postprocess(
+                &image,
+                &sd::PostprocessRequest {
+                    resize_mode: sd::ResizeMode::Resize,
+                    upscaler_1: sd::Upscaler::ESRGAN4x,
+                    upscaler_2: sd::Upscaler::ESRGAN4x,
+                    scale_factor: 2.0,
+                    ..Default::default()
+                },
+            )
+            .await?;
+
+        let bytes = util::encode_image_to_png_bytes(result)?;
+
+        mci.get_interaction_message(http)
+            .await?
+            .edit(http, |m| {
+                m.content(format!("Postprocessing of <{url}> complete."))
+                    .attachment((bytes.as_slice(), "postprocess.png"))
+            })
+            .await?;
+
+        Ok(())
+    }
+
     async fn mc_reissue_impl(
         &self,
         http: &Http,
@@ -1044,6 +1091,7 @@ impl EventHandler for Handler {
                             self.mc_retry_with_options(http, &mci, id).await
                         }
                         cid::Generation::Remix => self.mc_remix(http, &mci, id).await,
+                        cid::Generation::Upscale => self.mc_upscale(http, &mci, id).await,
                         cid::Generation::InterrogateClip => {
                             self.mc_interrogate(http, &mci, id, sd::Interrogator::Clip)
                                 .await
@@ -1098,6 +1146,7 @@ impl EventHandler for Handler {
                         cid::Generation::Retry => unreachable!(),
                         cid::Generation::RetryWithOptions => unreachable!(),
                         cid::Generation::Remix => unreachable!(),
+                        cid::Generation::Upscale => unreachable!(),
                         cid::Generation::InterrogateClip => unreachable!(),
                         cid::Generation::InterrogateDeepDanbooru => unreachable!(),
                     },

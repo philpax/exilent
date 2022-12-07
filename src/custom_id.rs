@@ -13,6 +13,7 @@ pub enum Generation {
     RetryWithOptionsResponse,
     Remix,
     RemixResponse,
+    Upscale,
     InterrogateClip,
     InterrogateDeepDanbooru,
 }
@@ -22,6 +23,7 @@ impl Generation {
     const GENERATION_RETRY_WITH_OPTIONS_RESPONSE: &str = "retry_with_options_response";
     const GENERATION_REMIX: &str = "remix";
     const GENERATION_REMIX_RESPONSE: &str = "remix_response";
+    const GENERATION_UPSCALE: &str = "upscale";
     const GENERATION_INTERROGATE_CLIP: &str = "interrogate_clip";
     const GENERATION_INTERROGATE_DEEPDANBOORU: &str = "interrogate_dd";
 
@@ -42,6 +44,7 @@ impl TryFrom<&str> for Generation {
             Self::GENERATION_RETRY_WITH_OPTIONS_RESPONSE => Ok(Self::RetryWithOptionsResponse),
             Self::GENERATION_REMIX => Ok(Self::Remix),
             Self::GENERATION_REMIX_RESPONSE => Ok(Self::RemixResponse),
+            Self::GENERATION_UPSCALE => Ok(Self::Upscale),
             Self::GENERATION_INTERROGATE_CLIP => Ok(Self::InterrogateClip),
             Self::GENERATION_INTERROGATE_DEEPDANBOORU => Ok(Self::InterrogateDeepDanbooru),
             _ => Err(anyhow::anyhow!("invalid command for generation")),
@@ -59,6 +62,7 @@ impl Display for Generation {
                 Self::RetryWithOptionsResponse => Self::GENERATION_RETRY_WITH_OPTIONS_RESPONSE,
                 Self::Remix => Self::GENERATION_REMIX,
                 Self::RemixResponse => Self::GENERATION_REMIX_RESPONSE,
+                Self::Upscale => Self::GENERATION_UPSCALE,
                 Self::InterrogateClip => Self::GENERATION_INTERROGATE_CLIP,
                 Self::InterrogateDeepDanbooru => Self::GENERATION_INTERROGATE_DEEPDANBOORU,
             }
