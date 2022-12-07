@@ -309,7 +309,7 @@ impl Handler {
         mci: &MessageComponentInteraction,
         id: i64,
     ) -> anyhow::Result<()> {
-        self.mc_retry_impl(http, mci, id, None, None, Some(None))
+        self.mc_retry_impl(http, mci, id, None, None, Some(None), None, false)
             .await
     }
 
@@ -319,10 +319,56 @@ impl Handler {
         mci: &MessageComponentInteraction,
         id: i64,
     ) -> anyhow::Result<()> {
-        let (old_prompt, negative_prompt, seed) = self
+        self.mc_reissue_impl(
+            http,
+            mci,
+            id,
+            "Retry with prompt",
+            cid::Generation::RetryWithOptionsResponse,
+        )
+        .await
+    }
+
+    async fn mc_retry_with_options_response(
+        &self,
+        http: &Http,
+        msi: &ModalSubmitInteraction,
+        id: i64,
+    ) -> anyhow::Result<()> {
+        self.mc_reissue_response_impl(http, msi, id, false).await
+    }
+
+    async fn mc_remix(
+        &self,
+        http: &Http,
+        mci: &MessageComponentInteraction,
+        id: i64,
+    ) -> anyhow::Result<()> {
+        self.mc_reissue_impl(http, mci, id, "Remix", cid::Generation::RemixResponse)
+            .await
+    }
+
+    async fn mc_remix_response(
+        &self,
+        http: &Http,
+        msi: &ModalSubmitInteraction,
+        id: i64,
+    ) -> anyhow::Result<()> {
+        self.mc_reissue_response_impl(http, msi, id, true).await
+    }
+
+    async fn mc_reissue_impl(
+        &self,
+        http: &Http,
+        mci: &MessageComponentInteraction,
+        id: i64,
+        title: &str,
+        custom_id: cid::Generation,
+    ) -> anyhow::Result<()> {
+        let (old_prompt, negative_prompt, seed, denoising_strength) = self
             .store
             .get_generation(id)?
-            .map(|g| (g.prompt, g.negative_prompt, g.seed))
+            .map(|g| (g.prompt, g.negative_prompt, g.seed, g.denoising_strength))
             .context("generation not found")?;
 
         mci.create_interaction_response(http, |r| {
@@ -356,9 +402,18 @@ impl Handler {
                                     .value(seed)
                             })
                         })
+                        .create_action_row(|r| {
+                            r.create_input_text(|t| {
+                                t.label("Denoising strength (0-1)")
+                                    .custom_id(constant::value::DENOISING_STRENGTH)
+                                    .required(false)
+                                    .style(InputTextStyle::Short)
+                                    .value(denoising_strength)
+                            })
+                        })
                     })
-                    .title("Retry with prompt")
-                    .custom_id(cid::Generation::RetryWithOptionsResponse.to_id(id))
+                    .title(title)
+                    .custom_id(custom_id.to_id(id))
                 })
         })
         .await?;
@@ -366,11 +421,12 @@ impl Handler {
         Ok(())
     }
 
-    async fn mc_retry_with_options_response(
+    async fn mc_reissue_response_impl(
         &self,
         http: &Http,
         msi: &ModalSubmitInteraction,
         id: i64,
+        paintover: bool,
     ) -> anyhow::Result<()> {
         let rows: HashMap<String, String> = msi
             .data
@@ -393,9 +449,22 @@ impl Handler {
         let seed = rows
             .get(constant::value::SEED)
             .map(|s| s.parse::<i64>().ok());
+        let denoising_strength = rows
+            .get(constant::value::DENOISING_STRENGTH)
+            .and_then(|s| s.parse::<f32>().ok())
+            .map(|f| f.clamp(0.0, 1.0));
 
-        self.mc_retry_impl(http, msi, id, prompt, negative_prompt, seed)
-            .await
+        self.mc_retry_impl(
+            http,
+            msi,
+            id,
+            prompt,
+            negative_prompt,
+            seed,
+            denoising_strength,
+            paintover,
+        )
+        .await
     }
 
     async fn mc_retry_impl(
@@ -407,15 +476,33 @@ impl Handler {
         negative_prompt: Option<&str>,
         // None: don't override; Some(None): override with a fresh seed; Some(Some(seed)): override with seed
         seed: Option<Option<i64>>,
+        denoising_strength: Option<f32>,
+        paintover: bool,
     ) -> anyhow::Result<()> {
         interaction
             .create(http, "Retry request received, processing...")
             .await?;
-        let generation = self
+        let mut generation = self
             .store
             .get_generation(id)?
             .context("generation not found")?
             .clone();
+
+        if paintover {
+            const UNKNOWN_URL: &str = "UNKNOWN";
+            let init_image = image::load_from_memory(&generation.image)?;
+
+            if let Some(image_generation) = generation.image_generation.as_mut() {
+                image_generation.init_image = init_image;
+                image_generation.init_url = UNKNOWN_URL.to_string();
+            } else {
+                generation.image_generation = Some(store::ImageGeneration {
+                    init_image,
+                    init_url: UNKNOWN_URL.to_string(),
+                    resize_mode: Default::default(),
+                });
+            }
+        }
 
         let mut request = generation.as_generation_request(&self.models);
         {
@@ -431,6 +518,9 @@ impl Handler {
             }
             if let Some(seed) = seed {
                 base.seed = seed;
+            }
+            if let Some(denoising_strength) = denoising_strength {
+                base.denoising_strength = Some(denoising_strength);
             }
         }
         interaction
@@ -767,6 +857,7 @@ impl EventHandler for Handler {
                         cid::Generation::RetryWithOptions => {
                             self.mc_retry_with_options(http, &mci, id).await
                         }
+                        cid::Generation::Remix => self.mc_remix(http, &mci, id).await,
                         cid::Generation::InterrogateClip => {
                             self.mc_interrogate(http, &mci, id, sd::Interrogator::Clip)
                                 .await
@@ -776,6 +867,7 @@ impl EventHandler for Handler {
                                 .await
                         }
                         cid::Generation::RetryWithOptionsResponse => unreachable!(),
+                        cid::Generation::RemixResponse => unreachable!(),
                     },
                     cid::CustomId::Interrogation { id, interrogation } => match interrogation {
                         cid::Interrogation::Generate => {
@@ -813,9 +905,13 @@ impl EventHandler for Handler {
                         cid::Generation::RetryWithOptionsResponse => {
                             self.mc_retry_with_options_response(http, &msi, id).await
                         }
+                        cid::Generation::RemixResponse => {
+                            self.mc_remix_response(http, &msi, id).await
+                        }
 
                         cid::Generation::Retry => unreachable!(),
                         cid::Generation::RetryWithOptions => unreachable!(),
+                        cid::Generation::Remix => unreachable!(),
                         cid::Generation::InterrogateClip => unreachable!(),
                         cid::Generation::InterrogateDeepDanbooru => unreachable!(),
                     },

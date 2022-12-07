@@ -150,6 +150,12 @@ pub async fn generation_task(
                                 .style(component::ButtonStyle::Secondary)
                                 .custom_id(cid::Generation::RetryWithOptions.to_id(store_key))
                         })
+                        .create_button(|b| {
+                            b.emoji(E::REMIX.parse::<ReactionType>().unwrap())
+                                .label("Remix")
+                                .style(component::ButtonStyle::Secondary)
+                                .custom_id(cid::Generation::Remix.to_id(store_key))
+                        })
                     })
                     .create_action_row(|r| {
                         r.create_button(|b| {
