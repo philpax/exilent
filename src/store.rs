@@ -29,6 +29,7 @@ impl Store {
                 sampler	            TEXT NOT NULL,
                 model_hash	        TEXT NOT NULL,
                 image	            BLOB NOT NULL,
+                image_url           TEXT,
                 denoising_strength  REAL NOT NULL,
 
                 user_id             TEXT NOT NULL,
@@ -104,6 +105,16 @@ impl Store {
         )?;
 
         Ok(db.last_insert_rowid())
+    }
+
+    pub fn set_generation_url(&self, key: i64, url: &str) -> anyhow::Result<()> {
+        let db = &mut *self.0.lock().unwrap();
+        db.execute(
+            r"UPDATE generation SET image_url = ? WHERE id = ?",
+            (url, key),
+        )?;
+
+        Ok(())
     }
 
     pub fn get_generation(&self, key: i64) -> anyhow::Result<Option<Generation>> {
@@ -191,6 +202,7 @@ pub struct Generation {
     pub sampler: Sampler,
     pub model_hash: String,
     pub image: Vec<u8>,
+    pub image_url: Option<String>,
     pub timestamp: chrono::DateTime<chrono::Local>,
     pub user_id: UserId,
     pub denoising_strength: f32,
@@ -398,6 +410,7 @@ impl Store {
             init_image,
             resize_mode,
             init_url,
+            image_url,
         ) = db
             .query_row(
                 &format!(
@@ -405,7 +418,7 @@ impl Store {
                     SELECT
                         prompt, negative_prompt, seed, width, height, cfg_scale, steps, tiling,
                         restore_faces, sampler, model_hash, image, user_id, timestamp,
-                        denoising_strength, init_image, resize_mode, init_url
+                        denoising_strength, init_image, resize_mode, init_url, image_url
                     FROM
                         generation
                     WHERE
@@ -435,6 +448,7 @@ impl Store {
                     let init_image: Option<Vec<u8>> = r.get(15)?;
                     let resize_mode: Option<String> = r.get(16)?;
                     let init_url: Option<String> = r.get(17)?;
+                    let image_url: Option<String> = r.get(18)?;
 
                     Ok((
                         prompt,
@@ -455,6 +469,7 @@ impl Store {
                         init_image,
                         resize_mode,
                         init_url,
+                        image_url,
                     ))
                 },
             )
@@ -476,6 +491,7 @@ impl Store {
             negative_prompt,
             model_hash,
             image,
+            image_url,
             timestamp,
             user_id: UserId(user_id.parse()?),
             denoising_strength,

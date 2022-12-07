@@ -489,16 +489,19 @@ impl Handler {
             .clone();
 
         if paintover {
-            const UNKNOWN_URL: &str = "UNKNOWN";
             let init_image = image::load_from_memory(&generation.image)?;
+            let init_url = generation
+                .image_url
+                .clone()
+                .unwrap_or_else(|| "UNKNOWN".to_string());
 
             if let Some(image_generation) = generation.image_generation.as_mut() {
                 image_generation.init_image = init_image;
-                image_generation.init_url = UNKNOWN_URL.to_string();
+                image_generation.init_url = init_url;
             } else {
                 generation.image_generation = Some(store::ImageGeneration {
                     init_image,
-                    init_url: UNKNOWN_URL.to_string(),
+                    init_url,
                     resize_mode: Default::default(),
                 });
             }

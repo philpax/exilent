@@ -5,6 +5,7 @@ use crate::{
     store::{self, Store},
     util::{self, DiscordInteraction},
 };
+use anyhow::Context;
 use serenity::{
     http::Http,
     model::prelude::{component, ReactionType},
@@ -120,6 +121,7 @@ pub async fn generation_task(
                 .filter(|p| !p.is_empty()),
             model_hash: result.info.model_hash.clone(),
             image: bytes.clone(),
+            image_url: None,
             timestamp: result.info.job_timestamp,
             user_id: interaction.user().id,
             denoising_strength: result.info.denoising_strength,
@@ -133,7 +135,7 @@ pub async fn generation_task(
         let store_key = store.insert_generation(generation)?;
 
         use constant::emojis as E;
-        interaction
+        let final_message = interaction
             .channel_id()
             .send_files(&http, [(bytes.as_slice(), filename.as_str())], |m| {
                 m.content(message).components(|c| {
@@ -184,6 +186,15 @@ pub async fn generation_task(
                 m
             })
             .await?;
+
+        store.set_generation_url(
+            store_key,
+            &final_message
+                .attachments
+                .first()
+                .context("no attachment")?
+                .url,
+        )?;
     }
     interaction
         .get_interaction_message(http)
