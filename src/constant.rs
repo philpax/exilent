@@ -9,6 +9,7 @@ pub mod config {
 pub mod command {
     pub const PAINT: &str = "paint";
     pub const PAINTOVER: &str = "paintover";
+    pub const POSTPROCESS: &str = "postprocess";
     pub const INTERROGATE: &str = "interrogate";
     pub const EXILENT: &str = "exilent";
     pub const PNG_INFO: &str = "pnginfo";
@@ -31,6 +32,15 @@ pub mod value {
     pub const DENOISING_STRENGTH: &str = "denoising_strength";
 
     pub const RESIZE_MODE: &str = "resize_mode";
+
+    pub const UPSCALER_1: &str = "upscaler_1";
+    pub const UPSCALER_2: &str = "upscaler_2";
+    pub const SCALE_FACTOR: &str = "scale_factor";
+    pub const CODEFORMER_VISIBILITY: &str = "codeformer_visibility";
+    pub const CODEFORMER_WEIGHT: &str = "codeformer_weight";
+    pub const UPSCALER_2_VISIBILITY: &str = "upscaler_2_visibility";
+    pub const GFPGAN_VISIBILITY: &str = "gfpgan_visibility";
+    pub const UPSCALE_FIRST: &str = "upscale_first";
 
     pub const IMAGE_URL: &str = "image_url";
     pub const IMAGE_ATTACHMENT: &str = "image_attachment";

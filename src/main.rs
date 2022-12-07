@@ -250,6 +250,91 @@ impl Handler {
         .await
     }
 
+    async fn postprocess(
+        &self,
+        http: &Http,
+        aci: ApplicationCommandInteraction,
+    ) -> anyhow::Result<()> {
+        let interaction: &dyn DiscordInteraction = &aci;
+        interaction
+            .create(http, "Postprocess request received, processing...")
+            .await?;
+
+        let url = util::get_image_url(&aci)?;
+
+        interaction
+            .edit(http, &format!("Postprocessing {url}..."))
+            .await?;
+
+        let bytes = reqwest::get(&url).await?.bytes().await?;
+        let image = image::load_from_memory(&bytes)?;
+
+        let upscaler_1 = util::get_value(&aci, constant::value::UPSCALER_1)
+            .and_then(util::value_to_string)
+            .and_then(|v| sd::Upscaler::try_from(v.as_str()).ok())
+            .context("expected upscaler 1")?;
+
+        let upscaler_2 = util::get_value(&aci, constant::value::UPSCALER_2)
+            .and_then(util::value_to_string)
+            .and_then(|v| sd::Upscaler::try_from(v.as_str()).ok())
+            .context("expected upscaler 2")?;
+
+        let scale_factor = util::get_value(&aci, constant::value::SCALE_FACTOR)
+            .and_then(util::value_to_number)
+            .map(|n| n as f32)
+            .context("expected scale factor")?;
+
+        let codeformer_visibility = util::get_value(&aci, constant::value::CODEFORMER_VISIBILITY)
+            .and_then(util::value_to_number)
+            .map(|n| n as f32);
+
+        let codeformer_weight = util::get_value(&aci, constant::value::CODEFORMER_WEIGHT)
+            .and_then(util::value_to_number)
+            .map(|n| n as f32);
+
+        let upscaler_2_visibility = util::get_value(&aci, constant::value::UPSCALER_2_VISIBILITY)
+            .and_then(util::value_to_number)
+            .map(|n| n as f32);
+
+        let gfpgan_visibility = util::get_value(&aci, constant::value::GFPGAN_VISIBILITY)
+            .and_then(util::value_to_number)
+            .map(|n| n as f32);
+
+        let upscale_first =
+            util::get_value(&aci, constant::value::UPSCALE_FIRST).and_then(util::value_to_bool);
+
+        let result = self
+            .client
+            .postprocess(
+                &image,
+                &sd::PostprocessRequest {
+                    resize_mode: sd::ResizeMode::Resize,
+                    upscaler_1,
+                    upscaler_2,
+                    scale_factor,
+                    codeformer_visibility,
+                    codeformer_weight,
+                    upscaler_2_visibility,
+                    gfpgan_visibility,
+                    upscale_first,
+                },
+            )
+            .await?;
+
+        let bytes = util::encode_image_to_png_bytes(result)?;
+
+        interaction
+            .get_interaction_message(http)
+            .await?
+            .edit(http, |m| {
+                m.content(format!("Postprocessing of <{url}> complete."))
+                    .attachment((bytes.as_slice(), "postprocess.png"))
+            })
+            .await?;
+
+        Ok(())
+    }
+
     async fn interrogate(
         &self,
         http: &Http,
@@ -767,6 +852,103 @@ impl EventHandler for Handler {
 
         Command::create_global_application_command(&ctx.http, |command| {
             command
+                .name(constant::command::POSTPROCESS)
+                .description("Postprocesses an image");
+
+            command
+                .create_option(|option| {
+                    let opt = option
+                        .name(constant::value::UPSCALER_1)
+                        .description("The first upscaler")
+                        .kind(CommandOptionType::String)
+                        .required(true);
+
+                    for value in sd::Upscaler::VALUES {
+                        opt.add_string_choice(value, value);
+                    }
+
+                    opt
+                })
+                .create_option(|option| {
+                    let opt = option
+                        .name(constant::value::UPSCALER_2)
+                        .description("The second upscaler")
+                        .kind(CommandOptionType::String)
+                        .required(true);
+
+                    for value in sd::Upscaler::VALUES {
+                        opt.add_string_choice(value, value);
+                    }
+
+                    opt
+                })
+                .create_option(|option| {
+                    option
+                        .name(constant::value::SCALE_FACTOR)
+                        .description("The factor by which to upscale the image")
+                        .kind(CommandOptionType::Number)
+                        .min_number_value(1.0)
+                        .max_number_value(3.0)
+                        .required(true)
+                })
+                .create_option(|option| {
+                    option
+                        .name(constant::value::IMAGE_URL)
+                        .description("The URL of the image to paint over")
+                        .kind(CommandOptionType::String)
+                })
+                .create_option(|option| {
+                    option
+                        .name(constant::value::IMAGE_ATTACHMENT)
+                        .description("The image to paint over")
+                        .kind(CommandOptionType::Attachment)
+                })
+                .create_option(|option| {
+                    option
+                        .name(constant::value::CODEFORMER_VISIBILITY)
+                        .description("How much of CodeFormer's result is blended into the result?")
+                        .kind(CommandOptionType::Number)
+                        .min_number_value(0.0)
+                        .max_number_value(1.0)
+                })
+                .create_option(|option| {
+                    option
+                        .name(constant::value::CODEFORMER_WEIGHT)
+                        .description("How strong is CodeFormer's effect?")
+                        .kind(CommandOptionType::Number)
+                        .min_number_value(0.0)
+                        .max_number_value(1.0)
+                })
+                .create_option(|option| {
+                    option
+                        .name(constant::value::UPSCALER_2_VISIBILITY)
+                        .description(
+                            "How much of the second upscaler's result is blended into the result?",
+                        )
+                        .kind(CommandOptionType::Number)
+                        .min_number_value(0.0)
+                        .max_number_value(1.0)
+                })
+                .create_option(|option| {
+                    option
+                        .name(constant::value::GFPGAN_VISIBILITY)
+                        .description("How much of GFPGAN's result is blended into the result?")
+                        .kind(CommandOptionType::Number)
+                        .min_number_value(0.0)
+                        .max_number_value(2.0)
+                })
+                .create_option(|option| {
+                    option
+                        .name(constant::value::UPSCALE_FIRST)
+                        .description("Should the upscaler be applied before other postprocessing?")
+                        .kind(CommandOptionType::Boolean)
+                })
+        })
+        .await
+        .unwrap();
+
+        Command::create_global_application_command(&ctx.http, |command| {
+            command
                 .name(constant::command::INTERROGATE)
                 .description("Interrogates an image to produce a caption")
                 .create_option(|option| {
@@ -842,6 +1024,7 @@ impl EventHandler for Handler {
                 match cmd.data.name.as_str() {
                     constant::command::PAINT => self.paint(http, cmd).await,
                     constant::command::PAINTOVER => self.paintover(http, cmd).await,
+                    constant::command::POSTPROCESS => self.postprocess(http, cmd).await,
                     constant::command::INTERROGATE => self.interrogate(http, cmd).await,
                     constant::command::EXILENT => self.exilent(http, cmd).await,
                     constant::command::PNG_INFO => self.png_info(http, cmd).await,
