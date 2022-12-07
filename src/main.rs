@@ -123,7 +123,7 @@ impl Handler {
             .create(http, "Paint request received, processing...")
             .await?;
         let base_parameters =
-            util::OwnedBaseGenerationParameters::load(&aci, &self.store, &self.models)?;
+            util::OwnedBaseGenerationParameters::load(&aci, &self.store, &self.models, true)?;
 
         interaction
             .edit(
@@ -168,8 +168,8 @@ impl Handler {
         interaction
             .create(http, "Paintover request received, processing...")
             .await?;
-        let base_parameters =
-            util::OwnedBaseGenerationParameters::load(&aci, &self.store, &self.models)?;
+        let mut base_parameters =
+            util::OwnedBaseGenerationParameters::load(&aci, &self.store, &self.models, false)?;
         let url = util::get_image_url(&aci)?;
         let resize_mode = util::get_value(&aci, constant::value::RESIZE_MODE)
             .and_then(util::value_to_string)
@@ -194,6 +194,36 @@ impl Handler {
 
         let bytes = reqwest::get(&url).await?.bytes().await?;
         let image = image::load_from_memory(&bytes)?;
+
+        if base_parameters.width.is_none() {
+            base_parameters.width = Some(image.width());
+        }
+        if base_parameters.height.is_none() {
+            base_parameters.height = Some(image.height());
+        }
+
+        if let Some((width, height)) = base_parameters
+            .width
+            .as_mut()
+            .zip(base_parameters.height.as_mut())
+        {
+            use constant::limits::{HEIGHT_MAX, WIDTH_MAX};
+
+            if *width > WIDTH_MAX {
+                let scale_factor = (*width as f32) / (WIDTH_MAX as f32);
+                *width = ((*width as f32) / scale_factor) as u32;
+                *height = ((*height as f32) / scale_factor) as u32;
+            }
+
+            if *height > HEIGHT_MAX {
+                let scale_factor = (*height as f32) / (HEIGHT_MAX as f32);
+                *width = ((*width as f32) / scale_factor) as u32;
+                *height = ((*height as f32) / scale_factor) as u32;
+            }
+
+            *width = *width / 64 * 64;
+            *height = *height / 64 * 64;
+        }
 
         issuer::generation_task(
             self.client

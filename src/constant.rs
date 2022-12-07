@@ -52,11 +52,11 @@ pub mod limits {
     pub const COUNT_MIN: usize = 1;
     pub const COUNT_MAX: usize = 4;
 
-    pub const WIDTH_MIN: usize = 64;
-    pub const WIDTH_MAX: usize = 1024;
+    pub const WIDTH_MIN: u32 = 64;
+    pub const WIDTH_MAX: u32 = 1024;
 
-    pub const HEIGHT_MIN: usize = 64;
-    pub const HEIGHT_MAX: usize = 1024;
+    pub const HEIGHT_MIN: u32 = 64;
+    pub const HEIGHT_MAX: u32 = 1024;
 
     pub const GUIDANCE_SCALE_MIN: f64 = 2.5;
     pub const GUIDANCE_SCALE_MAX: f64 = 20.0;

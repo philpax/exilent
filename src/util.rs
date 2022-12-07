@@ -106,6 +106,7 @@ impl OwnedBaseGenerationParameters<'_> {
         aci: &ApplicationCommandInteraction,
         store: &'a Store,
         models: &'a [sd::Model],
+        use_last_generation_for_size: bool,
     ) -> anyhow::Result<OwnedBaseGenerationParameters<'a>> {
         let prompt = get_value(aci, constant::value::PROMPT)
             .and_then(value_to_string)
@@ -123,15 +124,18 @@ impl OwnedBaseGenerationParameters<'_> {
         let last_generation = store.get_last_generation_for_user(aci.user.id)?;
         let last_generation = last_generation.as_ref();
 
-        let width = get_value(aci, constant::value::WIDTH)
+        let mut width = get_value(aci, constant::value::WIDTH)
             .and_then(value_to_int)
-            .map(|v| v as u32 / 64 * 64)
-            .or_else(|| last_generation.map(|g| g.width));
+            .map(|v| v as u32 / 64 * 64);
 
-        let height = get_value(aci, constant::value::HEIGHT)
+        let mut height = get_value(aci, constant::value::HEIGHT)
             .and_then(value_to_int)
-            .map(|v| v as u32 / 64 * 64)
-            .or_else(|| last_generation.map(|g| g.height));
+            .map(|v| v as u32 / 64 * 64);
+
+        if use_last_generation_for_size {
+            width = width.or_else(|| last_generation.map(|g| g.width));
+            height = height.or_else(|| last_generation.map(|g| g.height));
+        }
 
         let cfg_scale = get_value(aci, constant::value::GUIDANCE_SCALE)
             .and_then(value_to_number)
