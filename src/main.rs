@@ -1085,7 +1085,7 @@ impl EventHandler for Handler {
                     .expect("invalid interaction id");
 
                 match custom_id {
-                    cid::CustomId::Generation { id, generation } => match generation {
+                    cid::CustomId::Generation { id, value } => match value {
                         cid::Generation::Retry => self.mc_retry(http, &mci, id).await,
                         cid::Generation::RetryWithOptions => {
                             self.mc_retry_with_options(http, &mci, id).await
@@ -1103,7 +1103,7 @@ impl EventHandler for Handler {
                         cid::Generation::RetryWithOptionsResponse => unreachable!(),
                         cid::Generation::RemixResponse => unreachable!(),
                     },
-                    cid::CustomId::Interrogation { id, interrogation } => match interrogation {
+                    cid::CustomId::Interrogation { id, value } => match value {
                         cid::Interrogation::Generate => {
                             self.mc_interrogate_generate(http, &mci, id).await
                         }
@@ -1135,7 +1135,7 @@ impl EventHandler for Handler {
                     .expect("invalid interaction id");
 
                 match custom_id {
-                    cid::CustomId::Generation { id, generation } => match generation {
+                    cid::CustomId::Generation { id, value } => match value {
                         cid::Generation::RetryWithOptionsResponse => {
                             self.mc_retry_with_options_response(http, &msi, id).await
                         }
