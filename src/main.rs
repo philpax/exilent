@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     env,
+    str::FromStr,
 };
 
 use anyhow::Context as AnyhowContext;
@@ -387,7 +388,7 @@ impl Handler {
         mci: &MessageComponentInteraction,
         id: i64,
     ) -> anyhow::Result<()> {
-        self.mc_retry_impl(http, mci, id, None, None, Some(None), None, false)
+        self.mc_retry_impl(http, mci, id, Overrides::none(), false)
             .await
     }
 
@@ -490,10 +491,9 @@ impl Handler {
         title: &str,
         custom_id: cid::Generation,
     ) -> anyhow::Result<()> {
-        let (old_prompt, negative_prompt, seed, denoising_strength) = self
+        let generation = self
             .store
             .get_generation(id)?
-            .map(|g| (g.prompt, g.negative_prompt, g.seed, g.denoising_strength))
             .context("generation not found")?;
 
         mci.create_interaction_response(http, |r| {
@@ -506,7 +506,7 @@ impl Handler {
                                     .custom_id(constant::value::PROMPT)
                                     .required(true)
                                     .style(InputTextStyle::Short)
-                                    .value(old_prompt)
+                                    .value(generation.prompt)
                             })
                         })
                         .create_action_row(|r| {
@@ -515,7 +515,7 @@ impl Handler {
                                     .custom_id(constant::value::NEGATIVE_PROMPT)
                                     .required(false)
                                     .style(InputTextStyle::Short)
-                                    .value(negative_prompt.unwrap_or_default())
+                                    .value(generation.negative_prompt.unwrap_or_default())
                             })
                         })
                         .create_action_row(|r| {
@@ -524,16 +524,28 @@ impl Handler {
                                     .custom_id(constant::value::SEED)
                                     .required(false)
                                     .style(InputTextStyle::Short)
-                                    .value(seed)
+                                    .value(generation.seed)
                             })
                         })
                         .create_action_row(|r| {
                             r.create_input_text(|t| {
-                                t.label("Denoising strength (0-1)")
-                                    .custom_id(constant::value::DENOISING_STRENGTH)
+                                t.label("Width, height")
+                                    .custom_id(constant::value::WIDTH_HEIGHT)
                                     .required(false)
                                     .style(InputTextStyle::Short)
-                                    .value(denoising_strength)
+                                    .value(format!("{}, {}", generation.width, generation.height))
+                            })
+                        })
+                        .create_action_row(|r| {
+                            r.create_input_text(|t| {
+                                t.label("Guidance scale, denoising strength")
+                                    .custom_id(constant::value::GUIDANCE_SCALE_DENOISING_STRENGTH)
+                                    .required(false)
+                                    .style(InputTextStyle::Short)
+                                    .value(format!(
+                                        "{}, {}",
+                                        generation.cfg_scale, generation.denoising_strength
+                                    ))
                             })
                         })
                     })
@@ -567,26 +579,50 @@ impl Handler {
             })
             .collect();
 
+        fn parse_two<T: FromStr, U: FromStr>(value: Option<&String>) -> (Option<T>, Option<U>) {
+            fn parse_two_impl<T: FromStr, U: FromStr>(value: Option<&String>) -> Option<(T, U)> {
+                fn trim_parse<T: FromStr>(value: &str) -> Option<T> {
+                    value.trim().parse().ok()
+                }
+
+                let (str1, str2) = value?.split_once(',')?;
+                Some((trim_parse(str1)?, trim_parse(str2)?))
+            }
+            match parse_two_impl(value) {
+                Some((t, u)) => (Some(t), Some(u)),
+                _ => (None, None),
+            }
+        }
+
         let prompt = rows.get(constant::value::PROMPT).map(|s| s.as_str());
+
         let negative_prompt = rows
             .get(constant::value::NEGATIVE_PROMPT)
             .map(|s| s.as_str());
+
+        let (width, height) = parse_two(rows.get(constant::value::WIDTH_HEIGHT));
+
         let seed = rows
             .get(constant::value::SEED)
             .map(|s| s.parse::<i64>().ok());
-        let denoising_strength = rows
-            .get(constant::value::DENOISING_STRENGTH)
-            .and_then(|s| s.parse::<f32>().ok())
-            .map(|f| f.clamp(0.0, 1.0));
+
+        let (guidance_scale, denoising_strength) =
+            parse_two(rows.get(constant::value::GUIDANCE_SCALE_DENOISING_STRENGTH));
 
         self.mc_retry_impl(
             http,
             msi,
             id,
-            prompt,
-            negative_prompt,
-            seed,
-            denoising_strength,
+            Overrides::new(
+                prompt,
+                negative_prompt,
+                width,
+                height,
+                guidance_scale,
+                None,
+                seed,
+                denoising_strength,
+            ),
             paintover,
         )
         .await
@@ -597,11 +633,7 @@ impl Handler {
         http: &Http,
         interaction: &dyn DiscordInteraction,
         id: i64,
-        prompt: Option<&str>,
-        negative_prompt: Option<&str>,
-        // None: don't override; Some(None): override with a fresh seed; Some(Some(seed)): override with seed
-        seed: Option<Option<i64>>,
-        denoising_strength: Option<f32>,
+        overrides: Overrides<'_>,
         paintover: bool,
     ) -> anyhow::Result<()> {
         interaction
@@ -638,17 +670,29 @@ impl Handler {
                 store::GenerationRequest::Text(r) => &mut r.base,
                 store::GenerationRequest::Image(r) => &mut r.base,
             };
-            if let Some(prompt) = prompt {
+            if let Some(prompt) = overrides.prompt {
                 base.prompt = prompt;
             }
-            if let Some(negative_prompt) = negative_prompt {
+            if let Some(negative_prompt) = overrides.negative_prompt {
                 base.negative_prompt = Some(negative_prompt).filter(|s| !s.is_empty());
             }
-            if let Some(seed) = seed {
+            if let Some(width) = overrides.width {
+                base.width = Some(width);
+            }
+            if let Some(height) = overrides.height {
+                base.height = Some(height);
+            }
+            if let Some(guidance_scale) = overrides.guidance_scale {
+                base.cfg_scale = Some(guidance_scale as f32);
+            }
+            if let Some(steps) = overrides.steps {
+                base.steps = Some(steps as u32);
+            }
+            if let Some(seed) = overrides.seed {
                 base.seed = seed;
             }
-            if let Some(denoising_strength) = denoising_strength {
-                base.denoising_strength = Some(denoising_strength);
+            if let Some(denoising_strength) = overrides.denoising_strength {
+                base.denoising_strength = Some(denoising_strength as f32);
             }
         }
         interaction
@@ -1286,5 +1330,65 @@ fn populate_generate_options(command: &mut CreateApplicationCommand, models: &[s
 
             opt
         });
+    }
+}
+
+struct Overrides<'a> {
+    prompt: Option<&'a str>,
+    negative_prompt: Option<&'a str>,
+    width: Option<u32>,
+    height: Option<u32>,
+    guidance_scale: Option<f64>,
+    steps: Option<usize>,
+    /// None: don't override
+    /// Some(None): override with a fresh seed
+    /// Some(Some(seed)): override with seed
+    seed: Option<Option<i64>>,
+    denoising_strength: Option<f64>,
+}
+impl<'a> Overrides<'a> {
+    fn new(
+        prompt: Option<&'a str>,
+        negative_prompt: Option<&'a str>,
+        width: Option<u32>,
+        height: Option<u32>,
+        guidance_scale: Option<f64>,
+        steps: Option<usize>,
+        seed: Option<Option<i64>>,
+        denoising_strength: Option<f64>,
+    ) -> Self {
+        use constant::limits as L;
+
+        let (width, height) = if let (Some(width), Some(height)) = (width, height) {
+            let (width, height) = util::fixup_resolution(width, height);
+            (Some(width), Some(height))
+        } else {
+            (None, None)
+        };
+
+        Self {
+            prompt: prompt.filter(|s| !s.is_empty()),
+            negative_prompt: negative_prompt.filter(|s| !s.is_empty()),
+            width,
+            height,
+            guidance_scale: guidance_scale
+                .map(|s| s.clamp(L::GUIDANCE_SCALE_MIN, L::GUIDANCE_SCALE_MAX)),
+            steps: steps.map(|s| s.clamp(L::STEPS_MIN, L::STEPS_MAX)),
+            seed,
+            denoising_strength: denoising_strength.map(|s| s.clamp(0.0, 1.0)),
+        }
+    }
+
+    fn none() -> Self {
+        Self {
+            prompt: None,
+            negative_prompt: None,
+            width: None,
+            height: None,
+            guidance_scale: None,
+            steps: None,
+            seed: Some(None),
+            denoising_strength: None,
+        }
     }
 }
