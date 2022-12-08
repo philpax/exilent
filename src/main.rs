@@ -244,6 +244,28 @@ impl Handler {
         .await
     }
 
+    async fn paintagain(
+        &self,
+        http: &Http,
+        aci: ApplicationCommandInteraction,
+    ) -> anyhow::Result<()> {
+        let generation = self
+            .store
+            .get_last_generation_for_user(aci.user.id)?
+            .context("no last generation for user")?;
+
+        aci.create_interaction_response(
+            http,
+            util::create_modal_interaction_response!(
+                "Paint Again",
+                cid::Generation::RetryWithOptionsResponse,
+                generation
+            ),
+        )
+        .await?;
+        Ok(())
+    }
+
     async fn postprocess(
         &self,
         http: &Http,
@@ -496,63 +518,10 @@ impl Handler {
             .get_generation(id)?
             .context("generation not found")?;
 
-        mci.create_interaction_response(http, |r| {
-            r.kind(InteractionResponseType::Modal)
-                .interaction_response_data(|d| {
-                    d.components(|c| {
-                        c.create_action_row(|r| {
-                            r.create_input_text(|t| {
-                                t.label("Prompt")
-                                    .custom_id(constant::value::PROMPT)
-                                    .required(true)
-                                    .style(InputTextStyle::Short)
-                                    .value(generation.prompt)
-                            })
-                        })
-                        .create_action_row(|r| {
-                            r.create_input_text(|t| {
-                                t.label("Negative prompt")
-                                    .custom_id(constant::value::NEGATIVE_PROMPT)
-                                    .required(false)
-                                    .style(InputTextStyle::Short)
-                                    .value(generation.negative_prompt.unwrap_or_default())
-                            })
-                        })
-                        .create_action_row(|r| {
-                            r.create_input_text(|t| {
-                                t.label("Seed")
-                                    .custom_id(constant::value::SEED)
-                                    .required(false)
-                                    .style(InputTextStyle::Short)
-                                    .value(generation.seed)
-                            })
-                        })
-                        .create_action_row(|r| {
-                            r.create_input_text(|t| {
-                                t.label("Width, height")
-                                    .custom_id(constant::value::WIDTH_HEIGHT)
-                                    .required(false)
-                                    .style(InputTextStyle::Short)
-                                    .value(format!("{}, {}", generation.width, generation.height))
-                            })
-                        })
-                        .create_action_row(|r| {
-                            r.create_input_text(|t| {
-                                t.label("Guidance scale, denoising strength")
-                                    .custom_id(constant::value::GUIDANCE_SCALE_DENOISING_STRENGTH)
-                                    .required(false)
-                                    .style(InputTextStyle::Short)
-                                    .value(format!(
-                                        "{}, {}",
-                                        generation.cfg_scale, generation.denoising_strength
-                                    ))
-                            })
-                        })
-                    })
-                    .title(title)
-                    .custom_id(custom_id.to_id(id))
-                })
-        })
+        mci.create_interaction_response(
+            http,
+            util::create_modal_interaction_response!(title, custom_id, generation),
+        )
         .await?;
 
         Ok(())
@@ -936,6 +905,14 @@ impl EventHandler for Handler {
 
         Command::create_global_application_command(&ctx.http, |command| {
             command
+                .name(constant::command::PAINTAGAIN)
+                .description("Re-run the last generation command with a modal of overrides")
+        })
+        .await
+        .unwrap();
+
+        Command::create_global_application_command(&ctx.http, |command| {
+            command
                 .name(constant::command::POSTPROCESS)
                 .description("Postprocesses an image");
 
@@ -1108,6 +1085,7 @@ impl EventHandler for Handler {
                 match cmd.data.name.as_str() {
                     constant::command::PAINT => self.paint(http, cmd).await,
                     constant::command::PAINTOVER => self.paintover(http, cmd).await,
+                    constant::command::PAINTAGAIN => self.paintagain(http, cmd).await,
                     constant::command::POSTPROCESS => self.postprocess(http, cmd).await,
                     constant::command::INTERROGATE => self.interrogate(http, cmd).await,
                     constant::command::EXILENT => self.exilent(http, cmd).await,

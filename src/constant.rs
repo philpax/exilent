@@ -9,6 +9,7 @@ pub mod config {
 pub mod command {
     pub const PAINT: &str = "paint";
     pub const PAINTOVER: &str = "paintover";
+    pub const PAINTAGAIN: &str = "paintagain";
     pub const POSTPROCESS: &str = "postprocess";
     pub const INTERROGATE: &str = "interrogate";
     pub const EXILENT: &str = "exilent";

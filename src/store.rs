@@ -190,6 +190,7 @@ pub struct ImageGeneration {
 
 #[derive(Debug, Clone)]
 pub struct Generation {
+    pub id: Option<i64>,
     pub prompt: String,
     pub negative_prompt: Option<String>,
     pub seed: i64,
@@ -411,6 +412,7 @@ impl Store {
             resize_mode,
             init_url,
             image_url,
+            id,
         )) = db
             .query_row(
                 &format!(
@@ -418,7 +420,7 @@ impl Store {
                     SELECT
                         prompt, negative_prompt, seed, width, height, cfg_scale, steps, tiling,
                         restore_faces, sampler, model_hash, image, user_id, timestamp,
-                        denoising_strength, init_image, resize_mode, init_url, image_url
+                        denoising_strength, init_image, resize_mode, init_url, image_url, id
                     FROM
                         generation
                     WHERE
@@ -449,6 +451,7 @@ impl Store {
                     let resize_mode: Option<String> = r.get(16)?;
                     let init_url: Option<String> = r.get(17)?;
                     let image_url: Option<String> = r.get(18)?;
+                    let id: i64 = r.get(19)?;
 
                     Ok((
                         prompt,
@@ -470,12 +473,14 @@ impl Store {
                         resize_mode,
                         init_url,
                         image_url,
+                        id,
                     ))
                 },
             )
             .optional()? else { return Ok(None); };
 
         Ok(Some(Generation {
+            id: Some(id),
             prompt,
             seed,
             width,

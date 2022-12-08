@@ -107,6 +107,7 @@ pub async fn generation_task(
             .await?;
 
         let generation = store::Generation {
+            id: None,
             prompt: prompt.to_owned(),
             seed: *seed,
             width: result.info.width,

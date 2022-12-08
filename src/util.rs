@@ -345,3 +345,67 @@ macro_rules! interaction_message {
 implement_interaction!(ApplicationCommandInteraction);
 implement_interaction!(MessageComponentInteraction);
 implement_interaction!(ModalSubmitInteraction);
+
+macro_rules! create_modal_interaction_response {
+    ($title:expr, $custom_id:expr, $generation:ident) => {
+        |r| {
+            r.kind(InteractionResponseType::Modal)
+                .interaction_response_data(|d| {
+                    d.components(|c| {
+                        c.create_action_row(|r| {
+                            r.create_input_text(|t| {
+                                t.label("Prompt")
+                                    .custom_id(constant::value::PROMPT)
+                                    .required(true)
+                                    .style(InputTextStyle::Short)
+                                    .value($generation.prompt)
+                            })
+                        })
+                        .create_action_row(|r| {
+                            r.create_input_text(|t| {
+                                t.label("Negative prompt")
+                                    .custom_id(constant::value::NEGATIVE_PROMPT)
+                                    .required(false)
+                                    .style(InputTextStyle::Short)
+                                    .value($generation.negative_prompt.unwrap_or_default())
+                            })
+                        })
+                        .create_action_row(|r| {
+                            r.create_input_text(|t| {
+                                t.label("Seed")
+                                    .custom_id(constant::value::SEED)
+                                    .required(false)
+                                    .style(InputTextStyle::Short)
+                                    .value($generation.seed)
+                            })
+                        })
+                        .create_action_row(|r| {
+                            r.create_input_text(|t| {
+                                t.label("Width, height")
+                                    .custom_id(constant::value::WIDTH_HEIGHT)
+                                    .required(false)
+                                    .style(InputTextStyle::Short)
+                                    .value(format!("{}, {}", $generation.width, $generation.height))
+                            })
+                        })
+                        .create_action_row(|r| {
+                            r.create_input_text(|t| {
+                                t.label("Guidance scale, denoising strength")
+                                    .custom_id(constant::value::GUIDANCE_SCALE_DENOISING_STRENGTH)
+                                    .required(false)
+                                    .style(InputTextStyle::Short)
+                                    .value(format!(
+                                        "{}, {}",
+                                        $generation.cfg_scale, $generation.denoising_strength
+                                    ))
+                            })
+                        })
+                    })
+                    .title($title)
+                    .custom_id($custom_id.to_id($generation.id.unwrap()))
+                })
+        }
+    };
+}
+
+pub(crate) use create_modal_interaction_response;
