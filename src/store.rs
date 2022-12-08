@@ -391,7 +391,7 @@ impl Store {
         params: impl rusqlite::Params,
     ) -> anyhow::Result<Option<Generation>> {
         let db = &mut *self.0.lock().unwrap();
-        let (
+        let Some((
             prompt,
             negative_prompt,
             seed,
@@ -411,7 +411,7 @@ impl Store {
             resize_mode,
             init_url,
             image_url,
-        ) = db
+        )) = db
             .query_row(
                 &format!(
                     r"
@@ -473,8 +473,7 @@ impl Store {
                     ))
                 },
             )
-            .optional()?
-            .unwrap();
+            .optional()? else { return Ok(None); };
 
         Ok(Some(Generation {
             prompt,
