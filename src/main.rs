@@ -122,7 +122,7 @@ impl Handler {
         interaction
             .create(http, "Paint request received, processing...")
             .await?;
-        let base_parameters =
+        let mut base_parameters =
             util::OwnedBaseGenerationParameters::load(&aci, &self.store, &self.models, true)?;
 
         interaction
@@ -139,6 +139,14 @@ impl Handler {
                 ),
             )
             .await?;
+
+        if let Some((width, height)) = base_parameters
+            .width
+            .as_mut()
+            .zip(base_parameters.height.as_mut())
+        {
+            (*width, *height) = util::fixup_resolution(*width, *height);
+        }
 
         issuer::generation_task(
             self.client
@@ -207,22 +215,7 @@ impl Handler {
             .as_mut()
             .zip(base_parameters.height.as_mut())
         {
-            use constant::limits::{HEIGHT_MAX, WIDTH_MAX};
-
-            if *width > WIDTH_MAX {
-                let scale_factor = (*width as f32) / (WIDTH_MAX as f32);
-                *width = ((*width as f32) / scale_factor) as u32;
-                *height = ((*height as f32) / scale_factor) as u32;
-            }
-
-            if *height > HEIGHT_MAX {
-                let scale_factor = (*height as f32) / (HEIGHT_MAX as f32);
-                *width = ((*width as f32) / scale_factor) as u32;
-                *height = ((*height as f32) / scale_factor) as u32;
-            }
-
-            *width = *width / 64 * 64;
-            *height = *height / 64 * 64;
+            (*width, *height) = util::fixup_resolution(*width, *height);
         }
 
         issuer::generation_task(

@@ -256,6 +256,31 @@ pub fn encode_image_to_png_bytes(image: image::DynamicImage) -> anyhow::Result<V
     Ok(bytes)
 }
 
+pub fn fixup_resolution(width: u32, height: u32) -> (u32, u32) {
+    use constant::limits::{HEIGHT_MAX, WIDTH_MAX};
+
+    let mut width = width;
+    let mut height = height;
+    const ROUND_PRECISION: u32 = 64;
+
+    if width > WIDTH_MAX {
+        let scale_factor = (width as f32) / (WIDTH_MAX as f32);
+        width = ((width as f32) / scale_factor) as u32;
+        height = ((height as f32) / scale_factor) as u32;
+    }
+
+    if height > HEIGHT_MAX {
+        let scale_factor = (height as f32) / (HEIGHT_MAX as f32);
+        width = ((width as f32) / scale_factor) as u32;
+        height = ((height as f32) / scale_factor) as u32;
+    }
+
+    (
+        ((width + ROUND_PRECISION / 2) / ROUND_PRECISION) * ROUND_PRECISION,
+        ((height + ROUND_PRECISION / 2) / ROUND_PRECISION) * ROUND_PRECISION,
+    )
+}
+
 #[async_trait]
 pub trait DiscordInteraction: Send + Sync {
     async fn create(&self, http: &Http, message: &str) -> anyhow::Result<()>;
