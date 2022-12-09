@@ -93,29 +93,88 @@ struct Handler {
 impl Handler {
     async fn exilent(&self, http: &Http, cmd: ApplicationCommandInteraction) -> anyhow::Result<()> {
         let channel = cmd.channel_id;
-        cmd.create_interaction_response(http, |response| {
-            response
-                .kind(InteractionResponseType::ChannelMessageWithSource)
-                .interaction_response_data(|message| {
-                    message.title("Embeddings").content("Processing...")
+
+        match cmd.data.options[0].name.as_str() {
+            "embeddings" => {
+                cmd.create_interaction_response(http, |response| {
+                    response
+                        .kind(InteractionResponseType::ChannelMessageWithSource)
+                        .interaction_response_data(|message| {
+                            message.title("Embeddings").content("Processing...")
+                        })
                 })
-        })
-        .await?;
-        let texts = match self.client.embeddings().await {
-            Ok(embeddings) => {
-                util::generate_chunked_strings(embeddings.iter().map(|s| format!("`{s}`")), 1900)
-            }
-            Err(err) => vec![format!("{err:?}")],
-        };
-        cmd.edit(http, texts.first().unwrap()).await?;
-
-        for remainder in texts.iter().skip(1) {
-            channel
-                .send_message(http, |msg| msg.content(remainder))
                 .await?;
-        }
+                let texts = match self.client.embeddings().await {
+                    Ok(embeddings) => util::generate_chunked_strings(
+                        embeddings.iter().map(|s| format!("`{s}`")),
+                        1900,
+                    ),
+                    Err(err) => vec![format!("{err:?}")],
+                };
+                cmd.edit(http, texts.first().unwrap()).await?;
 
-        Ok(())
+                for remainder in texts.iter().skip(1) {
+                    channel
+                        .send_message(http, |msg| msg.content(remainder))
+                        .await?;
+                }
+
+                Ok(())
+            }
+            "stats" => {
+                let stats = self.store.get_model_usage_counts()?;
+                async fn get_user_name(
+                    http: &Http,
+                    guild_id: Option<GuildId>,
+                    id: UserId,
+                ) -> anyhow::Result<(UserId, String)> {
+                    let user = id.to_user(http).await?;
+                    let name = if let Some(guild_id) = guild_id {
+                        user.nick_in(http, guild_id).await
+                    } else {
+                        None
+                    };
+                    Ok((id, name.unwrap_or(user.name)))
+                }
+                let users = futures::future::join_all(
+                    stats
+                        .keys()
+                        .map(|id| get_user_name(http, cmd.guild_id, *id)),
+                )
+                .await
+                .into_iter()
+                .collect::<Result<HashMap<_, _>, _>>()?;
+
+                let message = stats
+                    .into_iter()
+                    .flat_map(|(user, counts)| {
+                        std::iter::once(format!(
+                            "**{}**",
+                            users
+                                .get(&user)
+                                .map(|s| s.as_str())
+                                .unwrap_or("unknown user")
+                        ))
+                        .chain(counts.into_iter().map(
+                            |(model_hash, count)| {
+                                format!(
+                                    "- {}: {} generations",
+                                    util::find_model_by_hash(&self.models, &model_hash)
+                                        .map(|m| m.1.name.as_str())
+                                        .unwrap_or("unknown model"),
+                                    count
+                                )
+                            },
+                        ))
+                    })
+                    .collect::<Vec<String>>()
+                    .join("\n");
+
+                cmd.create(http, &message).await?;
+                Ok(())
+            }
+            _ => unreachable!(),
+        }
     }
 
     async fn paint(&self, http: &Http, aci: ApplicationCommandInteraction) -> anyhow::Result<()> {
@@ -1049,6 +1108,12 @@ impl EventHandler for Handler {
                     option
                         .name("embeddings")
                         .description("Lists all of the supported embeddings")
+                        .kind(CommandOptionType::SubCommand)
+                })
+                .create_option(|option| {
+                    option
+                        .name("stats")
+                        .description("Output some statistics")
                         .kind(CommandOptionType::SubCommand)
                 })
         })

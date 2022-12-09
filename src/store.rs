@@ -1,7 +1,8 @@
-use std::sync::Mutex;
+use std::{collections::HashMap, sync::Mutex};
 
 use crate::{sd, util};
 use anyhow::Context;
+use itertools::Itertools;
 use rusqlite::OptionalExtension;
 use serenity::model::id::UserId;
 use stable_diffusion_a1111_webui_client::Sampler;
@@ -178,6 +179,34 @@ impl Store {
             result,
             interrogator,
         )?))
+    }
+
+    pub fn get_model_usage_counts(&self) -> anyhow::Result<HashMap<UserId, Vec<(String, u64)>>> {
+        self.0
+            .lock()
+            .unwrap()
+            .prepare(
+                r#"
+                SELECT user_id, model_hash, COUNT(*) AS count
+                FROM generation
+                GROUP BY user_id, model_hash
+                ORDER BY user_id, count DESC
+                "#,
+            )?
+            .query_map([], |row| row.try_into())?
+            .flat_map(Result::ok)
+            .group_by(|(uid, _, _): &(String, String, i64)| uid.clone())
+            .into_iter()
+            .map(|(uid, group)| {
+                anyhow::Ok((
+                    UserId(uid.parse()?),
+                    group
+                        .into_iter()
+                        .map(|(_, hash, count)| (hash, count as u64))
+                        .collect::<Vec<(String, u64)>>(),
+                ))
+            })
+            .collect::<Result<_, _>>()
     }
 }
 
