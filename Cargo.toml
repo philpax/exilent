@@ -5,17 +5,23 @@ version = "0.1.0"
 
 [dependencies]
 anyhow = "1.0.66"
+bytemuck = "1.12.3"
 chrono = "0.4.23"
 dotenv = "0.15.0"
+flume = "0.10.14"
 futures = "0.3.25"
+genevo = {version = "0.7.1", features = ["smallvec"]}
+hex = "0.4.3"
 image = "0.24.4"
 itertools = "0.10.5"
 nanoid = "0.4.0"
+once_cell = "1.16.0"
 parking_lot = "0.12.1"
 rand = "0.8.5"
 reqwest = "0.11.13"
-rusqlite = { version = "0.28.0", features = ["bundled", "chrono"] }
+rusqlite = {version = "0.28.0", features = ["bundled", "chrono"]}
 serde_json = "1.0.89"
 serenity = {version = "0.11.5", default-features = false, features = ["client", "gateway", "rustls_backend", "model", "collector"]}
+smallvec = "1.10.0"
 stable-diffusion-a1111-webui-client = {git = "https://github.com/philpax/stable-diffusion-a1111-webui-client.git"}
 tokio = {version = "1.0", features = ["full"]}

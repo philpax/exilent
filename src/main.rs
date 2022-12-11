@@ -2,10 +2,12 @@ use std::{
     collections::{HashMap, HashSet},
     env,
     str::FromStr,
+    sync::Arc,
 };
 
 use anyhow::Context as AnyhowContext;
 use dotenv::dotenv;
+use parking_lot::Mutex;
 use rand::seq::SliceRandom;
 use serenity::{
     async_trait,
@@ -32,6 +34,7 @@ mod custom_id;
 mod issuer;
 mod store;
 mod util;
+mod wirehead;
 
 use custom_id as cid;
 use stable_diffusion_a1111_webui_client as sd;
@@ -45,15 +48,17 @@ async fn main() -> anyhow::Result<()> {
     let client = {
         let sd_url = env::var("SD_URL").expect("SD_URL not specified");
         let sd_authentication = env::var("SD_USER").ok().zip(env::var("SD_PASS").ok());
-        sd::Client::new(
-            &sd_url,
-            sd_authentication
-                .as_ref()
-                .map(|p| sd::Authentication::ApiAuth(&p.0, &p.1))
-                .unwrap_or(sd::Authentication::None),
+        Arc::new(
+            sd::Client::new(
+                &sd_url,
+                sd_authentication
+                    .as_ref()
+                    .map(|p| sd::Authentication::ApiAuth(&p.0, &p.1))
+                    .unwrap_or(sd::Authentication::None),
+            )
+            .await
+            .unwrap(),
         )
-        .await
-        .unwrap()
     };
     let models = client.models().await?;
     let store = Store::load()?;
@@ -69,6 +74,7 @@ async fn main() -> anyhow::Result<()> {
         models,
         store,
         safe_tags,
+        session: Mutex::new(None),
     })
     .await
     .expect("Error creating client");
@@ -84,10 +90,12 @@ async fn main() -> anyhow::Result<()> {
 }
 
 struct Handler {
-    client: sd::Client,
+    client: Arc<sd::Client>,
     models: Vec<sd::Model>,
     store: Store,
     safe_tags: HashSet<&'static str>,
+
+    session: Mutex<Option<wirehead::Session>>,
 }
 /// Commands
 impl Handler {
@@ -469,6 +477,115 @@ impl Handler {
         interaction.edit(http, &result).await?;
 
         Ok(())
+    }
+
+    async fn wirehead(
+        &self,
+        http: Arc<Http>,
+        cmd: ApplicationCommandInteraction,
+    ) -> anyhow::Result<()> {
+        let subcommand = &cmd.data.options[0];
+        match subcommand.name.as_str() {
+            "start" => {
+                if self.session.lock().is_some() {
+                    cmd.create_interaction_response(&http, |response| {
+                        response
+                            .kind(InteractionResponseType::ChannelMessageWithSource)
+                            .interaction_response_data(|message| {
+                                message.content("Session already under way...")
+                            })
+                    })
+                    .await?;
+                    return Ok(());
+                }
+
+                let url = subcommand
+                    .options
+                    .iter()
+                    .find(|o| o.name == "url")
+                    .and_then(|o| o.value.as_ref())
+                    .and_then(|v| v.as_str());
+
+                cmd.create_interaction_response(&http, |response| {
+                    response
+                        .kind(InteractionResponseType::ChannelMessageWithSource)
+                        .interaction_response_data(|message| {
+                            message.content(format!(
+                                "Starting with {}...",
+                                if let Some(url) = url {
+                                    url
+                                } else {
+                                    "Danbooru tags"
+                                }
+                            ))
+                        })
+                })
+                .await?;
+
+                let tags = if let Some(url) = url {
+                    reqwest::get(url)
+                        .await?
+                        .text()
+                        .await?
+                        .lines()
+                        .map(|l| l.trim().to_string())
+                        .collect()
+                } else {
+                    include_str!("tags.txt")
+                        .lines()
+                        .map(|s| s.trim().to_string())
+                        .collect()
+                };
+
+                let model = self
+                    .models
+                    .iter()
+                    .find(|m| m.name.starts_with(wirehead::MODEL_NAME_PREFIX))
+                    .expect("failed to find model");
+
+                *self.session.lock() = Some(
+                    wirehead::Session::new(
+                        cmd.channel_id,
+                        http,
+                        self.client.clone(),
+                        Arc::new(model.clone()),
+                        tags,
+                    )
+                    .unwrap(),
+                );
+
+                Ok(())
+            }
+            "stop" => {
+                let session = self.session.lock().take();
+                let Some(session) = session else {
+                    cmd.create_interaction_response(&http, |response| {
+                        response
+                            .kind(InteractionResponseType::ChannelMessageWithSource)
+                            .interaction_response_data(|message| {
+                                message.content("No session running...")
+                            })
+                    })
+                    .await?;
+                    return Ok(());
+                };
+
+                session.shutdown();
+                std::mem::drop(session);
+
+                cmd.create_interaction_response(&http, |response| {
+                    response
+                        .kind(InteractionResponseType::ChannelMessageWithSource)
+                        .interaction_response_data(|message| {
+                            message.content("Session terminated. You are now free to start again.")
+                        })
+                })
+                .await?;
+
+                Ok(())
+            }
+            _ => unreachable!(),
+        }
     }
 }
 
@@ -930,6 +1047,54 @@ impl Handler {
         )
         .await
     }
+
+    async fn mc_rate(
+        &self,
+        http: &Http,
+        mci: MessageComponentInteraction,
+        id: wirehead::TextGenome,
+        rating: cid::Wirehead,
+    ) -> anyhow::Result<()> {
+        use wirehead::AsPhenotype;
+
+        if self.session.lock().is_none() {
+            mci.create_interaction_response(http, |m| {
+                m.kind(InteractionResponseType::ChannelMessageWithSource)
+                    .interaction_response_data(|d| d.content("there is no active session"))
+            })
+            .await?;
+
+            return Ok(());
+        };
+
+        // this is a bit of a contortion but it's fine for now
+        let tags = if let Some(session) = &*self.session.lock() {
+            session.rate(
+                id.clone(),
+                match rating {
+                    cid::Wirehead::Negative2 => 0,
+                    cid::Wirehead::Negative1 => 25,
+                    cid::Wirehead::Zero => 50,
+                    cid::Wirehead::Positive1 => 75,
+                    cid::Wirehead::Positive2 => 100,
+                },
+            );
+            session.tags.clone()
+        } else {
+            vec![]
+        };
+
+        mci.create_interaction_response(http, |m| {
+            m.kind(InteractionResponseType::UpdateMessage)
+                .interaction_response_data(|d| {
+                    d.content(format!("`{}`: {}", id.as_text(&tags), rating.as_integer()))
+                        .components(|c| c.set_action_rows(vec![]))
+                })
+        })
+        .await?;
+
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -1160,6 +1325,29 @@ impl EventHandler for Handler {
         })
         .await
         .unwrap();
+
+        Command::create_global_application_command(&ctx.http, |command| {
+            command
+                .name(constant::command::WIREHEAD)
+                .description("Interact with Wirehead")
+                .create_option(|o| {
+                    o.kind(CommandOptionType::SubCommand)
+                        .name("start")
+                        .description("Start a Wirehead session (if not already running)")
+                        .create_sub_option(|o| {
+                            o.kind(CommandOptionType::String)
+                            .name("url")
+                            .description("The URL of tags to use (defaults to Danbooru safe if not specified)")
+                        })
+                })
+                .create_option(|o| {
+                    o.kind(CommandOptionType::SubCommand)
+                        .name("stop")
+                        .description("Stop a Wirehead session (if running)")
+                })
+        })
+        .await
+        .unwrap();
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
@@ -1176,6 +1364,7 @@ impl EventHandler for Handler {
                     constant::command::INTERROGATE => self.interrogate(http, cmd).await,
                     constant::command::EXILENT => self.exilent(http, cmd).await,
                     constant::command::PNG_INFO => self.png_info(http, cmd).await,
+                    constant::command::WIREHEAD => self.wirehead(ctx.http.clone(), cmd).await,
                     _ => Ok(()),
                 }
             }
@@ -1227,6 +1416,9 @@ impl EventHandler for Handler {
                             .await
                         }
                     },
+                    cid::CustomId::Wirehead { id, value } => {
+                        self.mc_rate(http, mci, id, value).await
+                    }
                 }
             }
             Interaction::ModalSubmit(msi) => {
@@ -1251,7 +1443,8 @@ impl EventHandler for Handler {
                         cid::Generation::InterrogateClip => unreachable!(),
                         cid::Generation::InterrogateDeepDanbooru => unreachable!(),
                     },
-                    cid::CustomId::Interrogation { .. } => todo!(),
+                    cid::CustomId::Interrogation { .. } => unreachable!(),
+                    cid::CustomId::Wirehead { .. } => unreachable!(),
                 }
             }
             _ => Ok(()),

@@ -21,6 +21,7 @@ pub mod command {
     pub const INTERROGATE: &str = "interrogate";
     pub const EXILENT: &str = "exilent";
     pub const PNG_INFO: &str = "pnginfo";
+    pub const WIREHEAD: &str = "wirehead";
 }
 
 /// names of values used in interactions
