@@ -3,6 +3,13 @@ pub mod config {
     /// If set, Exilent will remove any tags in DeepDanbooru results that aren't
     /// present in safe_tags.txt.
     pub const USE_SAFE_TAGS: bool = true;
+
+    /// If set, Exilent will automatically look for a keyword in the square brackets
+    /// of a model name and prepend it to the prompt if it is not already present.
+    ///
+    /// Inkpunk v2 [nvinkpunk] will add `nvinkpunk` to the start of a prompt.
+    /// This does not work if there is more than one keyword.
+    pub const AUTOMATICALLY_PREPEND_KEYWORD: bool = true;
 }
 
 /// discord command names

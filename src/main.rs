@@ -186,6 +186,11 @@ impl Handler {
         let mut base_parameters =
             util::OwnedBaseGenerationParameters::load(&aci, &self.store, &self.models, true)?;
 
+        if let Some(model) = &base_parameters.model {
+            base_parameters.prompt =
+                util::prepend_keyword_if_necessary(&base_parameters.prompt, &model.name);
+        };
+
         interaction
             .edit(
                 http,
@@ -244,6 +249,11 @@ impl Handler {
             .and_then(util::value_to_string)
             .and_then(|s| sd::ResizeMode::try_from(s.as_str()).ok())
             .unwrap_or_default();
+
+        if let Some(model) = &base_parameters.model {
+            base_parameters.prompt =
+                util::prepend_keyword_if_necessary(&base_parameters.prompt, &model.name);
+        };
 
         interaction
             .edit(
@@ -723,6 +733,9 @@ impl Handler {
             if let Some(denoising_strength) = overrides.denoising_strength {
                 base.denoising_strength = Some(denoising_strength as f32);
             }
+            if let Some(model) = &base.model {
+                base.prompt = util::prepend_keyword_if_necessary(&base.prompt, &model.name);
+            };
         }
         interaction
             .edit(
@@ -876,6 +889,12 @@ impl Handler {
         let sampler = last_generation.map(|g| g.sampler);
         let model = last_generation
             .and_then(|g| util::find_model_by_hash(&self.models, &g.model_hash).map(|t| t.1));
+
+        let prompt = if let Some(model) = &model {
+            util::prepend_keyword_if_necessary(&prompt, &model.name)
+        } else {
+            prompt
+        };
 
         interaction
             .edit(http, &format!("`{prompt}`: Generating..."))

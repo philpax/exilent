@@ -282,6 +282,88 @@ pub fn fixup_resolution(width: u32, height: u32) -> (u32, u32) {
     )
 }
 
+pub fn extract_keywords(model_name: &str) -> Vec<&str> {
+    let left_index = model_name.rfind('[');
+    let right_index = model_name.rfind(']');
+    if let Some((left, right)) = left_index.zip(right_index) {
+        model_name[left + 1..right]
+            .split(',')
+            .map(|s| s.trim())
+            .collect()
+    } else {
+        vec![]
+    }
+}
+
+pub fn prepend_keyword_if_necessary(prompt: &str, model_name: &str) -> String {
+    if !constant::config::AUTOMATICALLY_PREPEND_KEYWORD {
+        return prompt.to_string();
+    }
+
+    prepend_keyword_if_necessary_unchecked(prompt, model_name)
+}
+
+fn prepend_keyword_if_necessary_unchecked(prompt: &str, model_name: &str) -> String {
+    let keywords = extract_keywords(model_name);
+    if let [keyword] = keywords.as_slice() {
+        if prompt.contains(keyword) {
+            prompt.to_string()
+        } else {
+            format!("{}, {}", keyword, prompt)
+        }
+    } else {
+        prompt.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn extract_keyword_works_correctly() {
+        use super::extract_keywords;
+        assert_eq!(extract_keywords("Inkpunk v1"), Vec::<&str>::new());
+        assert_eq!(
+            extract_keywords("Inkpunk v1 [nvinkpunk]"),
+            vec!["nvinkpunk"]
+        );
+        assert_eq!(
+            extract_keywords("All-In-One Pixel [pixelsprite, 16bitscene]"),
+            vec!["pixelsprite", "16bitscene"]
+        );
+        assert_eq!(
+            extract_keywords("All-In-One Pixel [random nonsense] [pixelsprite, 16bitscene]"),
+            vec!["pixelsprite", "16bitscene"]
+        );
+    }
+
+    #[test]
+    fn prepend_keyword_if_necessary_unchecked_correctly() {
+        use super::prepend_keyword_if_necessary_unchecked;
+        assert_eq!(
+            prepend_keyword_if_necessary_unchecked("my cool prompt", "Inkpunk v1"),
+            "my cool prompt"
+        );
+        assert_eq!(
+            prepend_keyword_if_necessary_unchecked("my cool prompt", "Inkpunk v1 [nvinkpunk]"),
+            "nvinkpunk, my cool prompt"
+        );
+        assert_eq!(
+            prepend_keyword_if_necessary_unchecked(
+                "my cool prompt",
+                "All-In-One Pixel [pixelsprite, 16bitscene]"
+            ),
+            "my cool prompt"
+        );
+        assert_eq!(
+            prepend_keyword_if_necessary_unchecked(
+                "my cool prompt",
+                "All-In-One Pixel [random nonsense] [pixelsprite, 16bitscene]"
+            ),
+            "my cool prompt"
+        );
+    }
+}
+
 #[async_trait]
 pub trait DiscordInteraction: Send + Sync {
     async fn create(&self, http: &Http, message: &str) -> anyhow::Result<()>;
