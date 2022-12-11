@@ -160,6 +160,7 @@ impl Handler {
                                 format!(
                                     "- {}: {} generations",
                                     util::find_model_by_hash(&self.models, &model_hash)
+                                        .as_ref()
                                         .map(|m| m.1.name.as_str())
                                         .unwrap_or("unknown model"),
                                     count
@@ -282,7 +283,7 @@ impl Handler {
             self.client
                 .generate_from_image_and_text(&sd::ImageToImageGenerationRequest {
                     base: base_parameters.as_base_generation_request(),
-                    images: vec![&image],
+                    images: vec![image.clone()],
                     resize_mode: Some(resize_mode),
                     ..Default::default()
                 })?,
@@ -699,10 +700,10 @@ impl Handler {
                 store::GenerationRequest::Image(r) => &mut r.base,
             };
             if let Some(prompt) = overrides.prompt {
-                base.prompt = prompt;
+                base.prompt = prompt.to_string();
             }
             if let Some(negative_prompt) = overrides.negative_prompt {
-                base.negative_prompt = Some(negative_prompt).filter(|s| !s.is_empty());
+                base.negative_prompt = Some(negative_prompt.to_string());
             }
             if let Some(width) = overrides.width {
                 base.width = Some(width);
@@ -732,6 +733,7 @@ impl Handler {
                     request
                         .base()
                         .negative_prompt
+                        .as_ref()
                         .map(|s| format!(" - `{s}`"))
                         .unwrap_or_default()
                 ),
@@ -883,7 +885,7 @@ impl Handler {
             self.client
                 .generate_from_text(&sd::TextToImageGenerationRequest {
                     base: sd::BaseGenerationRequest {
-                        prompt: prompt.as_str(),
+                        prompt: prompt.clone(),
                         negative_prompt: None,
                         seed: None,
                         batch_size: Some(1),
@@ -904,7 +906,7 @@ impl Handler {
             &self.store,
             http,
             interaction,
-            (&prompt, None),
+            (prompt.as_str(), None),
             None,
         )
         .await

@@ -302,10 +302,10 @@ impl Generation {
         )
     }
 
-    pub fn as_generation_request<'a>(&'a self, models: &'a [sd::Model]) -> GenerationRequest<'a> {
+    pub fn as_generation_request(&self, models: &[sd::Model]) -> GenerationRequest {
         let base = sd::BaseGenerationRequest {
-            prompt: self.prompt.as_str(),
-            negative_prompt: self.negative_prompt.as_deref(),
+            prompt: self.prompt.clone(),
+            negative_prompt: self.negative_prompt.clone(),
             seed: Some(self.seed),
             batch_size: Some(1),
             batch_count: Some(1),
@@ -325,7 +325,7 @@ impl Generation {
             GenerationRequest::Image(sd::ImageToImageGenerationRequest {
                 base,
                 resize_mode: Some(image_generation.resize_mode),
-                images: vec![&image_generation.init_image],
+                images: vec![image_generation.init_image.clone()],
                 ..Default::default()
             })
         } else {
@@ -337,12 +337,12 @@ impl Generation {
     }
 }
 
-pub enum GenerationRequest<'a> {
-    Text(sd::TextToImageGenerationRequest<'a>),
-    Image(sd::ImageToImageGenerationRequest<'a>),
+pub enum GenerationRequest {
+    Text(sd::TextToImageGenerationRequest),
+    Image(sd::ImageToImageGenerationRequest),
 }
-impl<'b> GenerationRequest<'b> {
-    pub fn base(&self) -> &sd::BaseGenerationRequest<'_> {
+impl GenerationRequest {
+    pub fn base(&self) -> &sd::BaseGenerationRequest {
         match self {
             GenerationRequest::Text(r) => &r.base,
             GenerationRequest::Image(r) => &r.base,

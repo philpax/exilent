@@ -86,7 +86,7 @@ pub fn get_image_url(aci: &ApplicationCommandInteraction) -> anyhow::Result<Stri
         .context("expected an image to be passed in")?)
 }
 
-pub struct OwnedBaseGenerationParameters<'a> {
+pub struct OwnedBaseGenerationParameters {
     pub prompt: String,
     pub negative_prompt: Option<String>,
     pub seed: Option<i64>,
@@ -99,15 +99,15 @@ pub struct OwnedBaseGenerationParameters<'a> {
     pub tiling: Option<bool>,
     pub restore_faces: Option<bool>,
     pub sampler: Option<sd::Sampler>,
-    pub model: Option<&'a sd::Model>,
+    pub model: Option<sd::Model>,
 }
-impl OwnedBaseGenerationParameters<'_> {
-    pub fn load<'a>(
+impl OwnedBaseGenerationParameters {
+    pub fn load(
         aci: &ApplicationCommandInteraction,
-        store: &'a Store,
-        models: &'a [sd::Model],
+        store: &Store,
+        models: &[sd::Model],
         use_last_generation_for_size: bool,
-    ) -> anyhow::Result<OwnedBaseGenerationParameters<'a>> {
+    ) -> anyhow::Result<OwnedBaseGenerationParameters> {
         let prompt = get_value(aci, constant::value::PROMPT)
             .and_then(value_to_string)
             .context("expected prompt")?;
@@ -175,7 +175,7 @@ impl OwnedBaseGenerationParameters<'_> {
 
             model_params
                 .first()
-                .and_then(|v| models.iter().find(|m| m.title == *v))
+                .and_then(|v| models.iter().find(|m| m.title == *v).cloned())
                 .or_else(|| {
                     last_generation
                         .and_then(|g| find_model_by_hash(&models, &g.model_hash).map(|t| t.1))
@@ -201,8 +201,8 @@ impl OwnedBaseGenerationParameters<'_> {
 
     pub fn as_base_generation_request(&self) -> sd::BaseGenerationRequest {
         sd::BaseGenerationRequest {
-            prompt: self.prompt.as_str(),
-            negative_prompt: self.negative_prompt.as_deref(),
+            prompt: self.prompt.clone(),
+            negative_prompt: self.negative_prompt.clone(),
             seed: self.seed,
             batch_size: Some(1),
             batch_count: self.batch_count,
@@ -214,7 +214,7 @@ impl OwnedBaseGenerationParameters<'_> {
             tiling: self.tiling,
             restore_faces: self.restore_faces,
             sampler: self.sampler,
-            model: self.model,
+            model: self.model.clone(),
             ..Default::default()
         }
     }
@@ -239,14 +239,15 @@ pub fn generate_chunked_strings(
     texts
 }
 
-pub fn find_model_by_hash<'a>(
-    models: &'a [sd::Model],
-    model_hash: &str,
-) -> Option<(usize, &'a sd::Model)> {
-    models.iter().enumerate().find(|(_, m)| {
-        let Some(hash_wrapped) = m.title.split_ascii_whitespace().last() else { return false };
-        &hash_wrapped[1..hash_wrapped.len() - 1] == model_hash
-    })
+pub fn find_model_by_hash(models: &[sd::Model], model_hash: &str) -> Option<(usize, sd::Model)> {
+    models
+        .iter()
+        .enumerate()
+        .find(|(_, m)| {
+            let Some(hash_wrapped) = m.title.split_ascii_whitespace().last() else { return false };
+            &hash_wrapped[1..hash_wrapped.len() - 1] == model_hash
+        })
+        .map(|(idx, model)| (idx, model.clone()))
 }
 
 pub fn encode_image_to_png_bytes(image: image::DynamicImage) -> anyhow::Result<Vec<u8>> {
