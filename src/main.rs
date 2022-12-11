@@ -74,7 +74,7 @@ async fn main() -> anyhow::Result<()> {
         models,
         store,
         safe_tags,
-        session: Mutex::new(None),
+        session: Mutex::new(HashMap::new()),
     })
     .await
     .expect("Error creating client");
@@ -95,7 +95,7 @@ struct Handler {
     store: Store,
     safe_tags: HashSet<&'static str>,
 
-    session: Mutex<Option<wirehead::Session>>,
+    session: Mutex<HashMap<ChannelId, wirehead::Session>>,
 }
 /// Commands
 impl Handler {
@@ -487,7 +487,7 @@ impl Handler {
         let subcommand = &cmd.data.options[0];
         match subcommand.name.as_str() {
             "start" => {
-                if self.session.lock().is_some() {
+                if self.session.lock().contains_key(&cmd.channel_id) {
                     cmd.create_interaction_response(&http, |response| {
                         response
                             .kind(InteractionResponseType::ChannelMessageWithSource)
@@ -543,7 +543,8 @@ impl Handler {
                     .find(|m| m.name.starts_with(wirehead::MODEL_NAME_PREFIX))
                     .expect("failed to find model");
 
-                *self.session.lock() = Some(
+                self.session.lock().insert(
+                    cmd.channel_id,
                     wirehead::Session::new(
                         cmd.channel_id,
                         http,
@@ -557,7 +558,7 @@ impl Handler {
                 Ok(())
             }
             "stop" => {
-                let session = self.session.lock().take();
+                let session = self.session.lock().remove(&cmd.channel_id);
                 let Some(session) = session else {
                     cmd.create_interaction_response(&http, |response| {
                         response
@@ -1057,7 +1058,7 @@ impl Handler {
     ) -> anyhow::Result<()> {
         use wirehead::AsPhenotype;
 
-        if self.session.lock().is_none() {
+        if !self.session.lock().contains_key(&mci.channel_id) {
             mci.create_interaction_response(http, |m| {
                 m.kind(InteractionResponseType::ChannelMessageWithSource)
                     .interaction_response_data(|d| d.content("there is no active session"))
@@ -1068,7 +1069,7 @@ impl Handler {
         };
 
         // this is a bit of a contortion but it's fine for now
-        let tags = if let Some(session) = &*self.session.lock() {
+        let tags = if let Some(session) = self.session.lock().get(&mci.channel_id) {
             session.rate(
                 id.clone(),
                 match rating {
