@@ -57,7 +57,7 @@ async fn main() -> anyhow::Result<()> {
     };
     let models = client.models().await?;
     let store = Store::load()?;
-    let safe_tags = include_str!("safe_tags.txt").lines().collect();
+    let safe_tags = include_str!("tags.txt").lines().collect();
 
     // Build our client.
     let mut client = Client::builder(

@@ -1,11 +1,11 @@
-use std::{collections::HashMap, sync::Mutex};
-
 use crate::{sd, util};
 use anyhow::Context;
 use itertools::Itertools;
+use parking_lot::Mutex;
 use rusqlite::OptionalExtension;
 use serenity::model::id::UserId;
 use stable_diffusion_a1111_webui_client::Sampler;
+use std::collections::HashMap;
 
 pub struct Store(Mutex<rusqlite::Connection>);
 impl Store {
@@ -68,7 +68,7 @@ impl Store {
 
     pub fn insert_generation(&self, generation: Generation) -> anyhow::Result<i64> {
         let g = generation;
-        let db = &mut *self.0.lock().unwrap();
+        let db = &mut *self.0.lock();
         db.execute(
             r"
             INSERT INTO generation
@@ -109,7 +109,7 @@ impl Store {
     }
 
     pub fn set_generation_url(&self, key: i64, url: &str) -> anyhow::Result<()> {
-        let db = &mut *self.0.lock().unwrap();
+        let db = &mut *self.0.lock();
         db.execute(
             r"UPDATE generation SET image_url = ? WHERE id = ?",
             (url, key),
@@ -131,7 +131,7 @@ impl Store {
 
     pub fn insert_interrogation(&self, interrogation: Interrogation) -> anyhow::Result<i64> {
         let i = interrogation;
-        let db = &mut *self.0.lock().unwrap();
+        let db = &mut *self.0.lock();
         db.execute(
             r"
             INSERT INTO interrogation
@@ -153,7 +153,7 @@ impl Store {
     }
 
     pub fn get_interrogation(&self, key: i64) -> anyhow::Result<Option<Interrogation>> {
-        let db = &mut *self.0.lock().unwrap();
+        let db = &mut *self.0.lock();
         let Some((
             user_id, generation_id, url, result, interrogator
         )) = db.query_row(
@@ -184,7 +184,6 @@ impl Store {
     pub fn get_model_usage_counts(&self) -> anyhow::Result<HashMap<UserId, Vec<(String, u64)>>> {
         self.0
             .lock()
-            .unwrap()
             .prepare(
                 r#"
                 SELECT user_id, model_hash, COUNT(*) AS count
@@ -420,7 +419,7 @@ impl Store {
         predicate: &str,
         params: impl rusqlite::Params,
     ) -> anyhow::Result<Option<Generation>> {
-        let db = &mut *self.0.lock().unwrap();
+        let db = &mut *self.0.lock();
         let Some((
             prompt,
             negative_prompt,

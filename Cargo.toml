@@ -11,6 +11,7 @@ futures = "0.3.25"
 image = "0.24.4"
 itertools = "0.10.5"
 nanoid = "0.4.0"
+parking_lot = "0.12.1"
 rand = "0.8.5"
 reqwest = "0.11.13"
 rusqlite = { version = "0.28.0", features = ["bundled", "chrono"] }
