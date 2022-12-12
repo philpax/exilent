@@ -1,5 +1,3 @@
-use std::{collections::HashSet, time::Duration};
-
 use crate::{
     cid, constant,
     store::{self, Store},
@@ -12,6 +10,7 @@ use serenity::{
     prelude::Mentionable,
 };
 use stable_diffusion_a1111_webui_client as sd;
+use std::time::Duration;
 
 pub async fn generation_task(
     task: sd::GenerationTask,
@@ -215,7 +214,6 @@ pub async fn generation_task(
 pub async fn interrogate_task(
     client: &sd::Client,
     store: &Store,
-    safe_tags: &HashSet<&str>,
     interaction: &dyn DiscordInteraction,
     http: &Http,
     (image, source, interrogator): (
@@ -230,7 +228,7 @@ pub async fn interrogate_task(
     {
         result
             .split(", ")
-            .filter(|s| safe_tags.contains(s))
+            .filter(|s| constant::resource::DANBOORU_TAGS.contains(s))
             .collect::<Vec<_>>()
             .join(", ")
     } else {

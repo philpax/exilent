@@ -91,6 +91,7 @@ pub mod limits {
 
 /// misc
 pub mod misc {
+
     /// the factor to scale progress images by to reduce upload size
     pub const PROGRESS_SCALE_FACTOR: u32 = 2;
 
@@ -99,4 +100,21 @@ pub mod misc {
 
     /// number of models per category
     pub const MODEL_CHUNK_COUNT: usize = 25;
+}
+
+/// resource
+pub mod resource {
+    use once_cell::sync::Lazy;
+    use std::collections::HashSet;
+
+    /// Danbooru tags
+    pub static DANBOORU_TAGS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+        include_str!("../resource/tags.txt")
+            .lines()
+            .map(|l| l.trim())
+            .collect()
+    });
+
+    /// Image to show when generation fails
+    pub const GENERATION_FAILED_IMAGE: &[u8] = include_bytes!("../resource/generation-failed.png");
 }

@@ -1,7 +1,6 @@
+use crate::wirehead::simulation::TextGenome;
 use anyhow::Context;
 use std::fmt::Display;
-
-use crate::wirehead::TextGenome;
 
 const SEPARATOR: &str = "#";
 

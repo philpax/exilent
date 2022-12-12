@@ -81,9 +81,9 @@ pub fn get_image_url(aci: &ApplicationCommandInteraction) -> anyhow::Result<Stri
 
     let image_url = get_value(aci, constant::value::IMAGE_URL).and_then(value_to_string);
 
-    Ok(image_attachment_url
+    image_attachment_url
         .or(image_url)
-        .context("expected an image to be passed in")?)
+        .context("expected an image to be passed in")
 }
 
 pub struct OwnedBaseGenerationParameters {
@@ -178,7 +178,7 @@ impl OwnedBaseGenerationParameters {
                 .and_then(|v| models.iter().find(|m| m.title == *v).cloned())
                 .or_else(|| {
                     last_generation
-                        .and_then(|g| find_model_by_hash(&models, &g.model_hash).map(|t| t.1))
+                        .and_then(|g| find_model_by_hash(models, &g.model_hash).map(|t| t.1))
                 })
         };
 
@@ -432,6 +432,8 @@ implement_interaction!(ModalSubmitInteraction);
 macro_rules! create_modal_interaction_response {
     ($title:expr, $custom_id:expr, $generation:ident) => {
         |r| {
+            use serenity::model::prelude::component::InputTextStyle;
+
             r.kind(InteractionResponseType::Modal)
                 .interaction_response_data(|d| {
                     d.components(|c| {
