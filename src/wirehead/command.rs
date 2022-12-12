@@ -14,7 +14,7 @@ use serenity::{
     },
 };
 use stable_diffusion_a1111_webui_client as sd;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, fmt::Display, sync::Arc};
 
 pub async fn register(http: &Http, models: &[sd::Model]) -> anyhow::Result<()> {
     Command::create_global_application_command(http, |command| {
@@ -104,17 +104,55 @@ async fn start(
         .and_then(util::value_to_bool)
         .unwrap_or(false);
 
+    let params = command::OwnedBaseGenerationParameters::load(
+        cmd.user.id,
+        &subcommand.options,
+        store,
+        models,
+        false,
+        false,
+    )?;
+
+    fn display<T: Display>(value: &Option<T>) -> Option<&dyn Display> {
+        value.as_ref().map(|s| s as &dyn Display)
+    }
+
     cmd.create_interaction_response(&http, |response| {
         response
             .kind(InteractionResponseType::ChannelMessageWithSource)
             .interaction_response_data(|message| {
                 message.content(format!(
-                    "Starting with {}...",
-                    if let Some(url) = url.as_deref() {
-                        url
-                    } else {
-                        "Danbooru tags"
-                    }
+                    "Starting with the following settings:\n{}",
+                    [
+                        (
+                            "Tags",
+                            if let Some(url) = url.as_ref() {
+                                Some(url as &dyn Display)
+                            } else {
+                                Some(&"Danbooru tags" as &dyn Display)
+                            },
+                        ),
+                        ("Negative prompt", display(&params.negative_prompt)),
+                        ("Seed", display(&params.seed)),
+                        ("Count", display(&params.batch_count)),
+                        ("Width", display(&params.width)),
+                        ("Height", display(&params.height)),
+                        ("Guidance scale", display(&params.cfg_scale)),
+                        ("Denoising strength", display(&params.denoising_strength)),
+                        ("Steps", display(&params.steps)),
+                        ("Tiling", display(&params.tiling)),
+                        ("Restore faces", display(&params.restore_faces)),
+                        ("Sampler", display(&params.sampler)),
+                        (
+                            "Model",
+                            display(&params.model.as_ref().map(|s| &s.name as &dyn Display))
+                        ),
+                    ]
+                    .into_iter()
+                    .filter_map(|(key, value)| Some((key, value?)))
+                    .map(|(key, value)| format!("- *{key}*: {value}"))
+                    .collect::<Vec<_>>()
+                    .join("\n")
                 ))
             })
     })
@@ -134,15 +172,6 @@ async fn start(
             .map(|s| s.to_string())
             .collect()
     };
-
-    let params = command::OwnedBaseGenerationParameters::load(
-        cmd.user.id,
-        &subcommand.options,
-        store,
-        models,
-        false,
-        false,
-    )?;
 
     sessions.lock().insert(
         cmd.channel_id,
