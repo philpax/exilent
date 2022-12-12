@@ -82,7 +82,9 @@ impl EventHandler for Handler {
         exilent::command::register(&ctx.http, &self.models)
             .await
             .unwrap();
-        wirehead::command::register(&ctx.http).await.unwrap();
+        wirehead::command::register(&ctx.http, &self.models)
+            .await
+            .unwrap();
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
@@ -130,11 +132,12 @@ impl EventHandler for Handler {
                     }
                     constant::command::WIREHEAD => {
                         wirehead::command::wirehead(
+                            ctx.http.clone(),
+                            cmd,
                             &self.sessions,
                             self.client.clone(),
                             &self.models,
-                            ctx.http.clone(),
-                            cmd,
+                            &self.store,
                         )
                         .await
                     }

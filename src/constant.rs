@@ -91,7 +91,6 @@ pub mod limits {
 
 /// misc
 pub mod misc {
-
     /// the factor to scale progress images by to reduce upload size
     pub const PROGRESS_SCALE_FACTOR: u32 = 2;
 

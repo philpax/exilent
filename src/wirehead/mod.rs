@@ -1,4 +1,5 @@
 use self::simulation::{FitnessStore, TextGenome};
+use crate::command::OwnedBaseGenerationParameters;
 use serenity::{http::Http, model::prelude::ChannelId};
 use stable_diffusion_a1111_webui_client as sd;
 use std::sync::{
@@ -23,7 +24,7 @@ impl Session {
         http: Arc<Http>,
         channel_id: ChannelId,
         client: Arc<sd::Client>,
-        model: Arc<sd::Model>,
+        params: OwnedBaseGenerationParameters,
         tags: Vec<String>,
     ) -> anyhow::Result<Self> {
         let shutdown = Arc::new(AtomicBool::new(false));
@@ -42,7 +43,7 @@ impl Session {
             http,
             channel_id,
             client,
-            model,
+            params,
             fitness_store.clone(),
             shutdown.clone(),
             tags.clone(),

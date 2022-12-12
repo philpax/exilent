@@ -1,6 +1,6 @@
 use super::issuer;
 use crate::{
-    constant, custom_id as cid, store,
+    command, constant, custom_id as cid, store,
     util::{self, DiscordInteraction},
 };
 use anyhow::Context;
@@ -23,7 +23,13 @@ pub async fn register(http: &Http, models: &[sd::Model]) -> anyhow::Result<()> {
             .name(constant::command::PAINT)
             .description("Paints your dreams");
 
-        crate::command::populate_generate_options(command, models);
+        command::populate_generate_options(
+            |opt| {
+                command.add_option(opt);
+            },
+            models,
+            true,
+        );
         command
     })
     .await?;
@@ -33,7 +39,13 @@ pub async fn register(http: &Http, models: &[sd::Model]) -> anyhow::Result<()> {
             .name(constant::command::PAINTOVER)
             .description("Paints your dreams over another image");
 
-        crate::command::populate_generate_options(command, models);
+        command::populate_generate_options(
+            |opt| {
+                command.add_option(opt);
+            },
+            models,
+            true,
+        );
         command
             .create_option(|option| {
                 option
@@ -351,7 +363,8 @@ pub async fn paint(
     interaction
         .create(http, "Paint request received, processing...")
         .await?;
-    let mut base_parameters = util::OwnedBaseGenerationParameters::load(&aci, store, models, true)?;
+    let mut base_parameters =
+        command::OwnedBaseGenerationParameters::load(&aci, store, models, true, true)?;
 
     if let Some(model) = &base_parameters.model {
         base_parameters.prompt =
@@ -411,7 +424,7 @@ pub async fn paintover(
         .create(http, "Paintover request received, processing...")
         .await?;
     let mut base_parameters =
-        util::OwnedBaseGenerationParameters::load(&aci, store, models, false)?;
+        command::OwnedBaseGenerationParameters::load(&aci, store, models, false, true)?;
     let url = util::get_image_url(&aci)?;
     let resize_mode = util::get_value(&aci, constant::value::RESIZE_MODE)
         .and_then(util::value_to_string)

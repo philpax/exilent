@@ -1,7 +1,6 @@
-use crate::constant;
+use crate::{command, constant, store};
 
 use super::Session;
-use anyhow::Context;
 use parking_lot::Mutex;
 use serenity::{
     http::Http,
@@ -17,9 +16,7 @@ use serenity::{
 use stable_diffusion_a1111_webui_client as sd;
 use std::{collections::HashMap, sync::Arc};
 
-pub const MODEL_NAME_PREFIX: &str = "Anything";
-
-pub async fn register(http: &Http) -> anyhow::Result<()> {
+pub async fn register(http: &Http, models: &[sd::Model]) -> anyhow::Result<()> {
     Command::create_global_application_command(http, |command| {
         command
             .name(constant::command::WIREHEAD)
@@ -27,12 +24,23 @@ pub async fn register(http: &Http) -> anyhow::Result<()> {
             .create_option(|o| {
                 o.kind(CommandOptionType::SubCommand)
                     .name("start")
-                    .description("Start a Wirehead session (if not already running)")
-                    .create_sub_option(|o| {
-                        o.kind(CommandOptionType::String).name("url").description(
-                            "The URL of tags to use (defaults to Danbooru safe if not specified)",
-                        )
-                    })
+                    .description("Start a Wirehead session (if not already running)");
+
+                command::populate_generate_options(
+                    |opt| {
+                        o.add_sub_option(opt);
+                    },
+                    models,
+                    false,
+                );
+
+                o.create_sub_option(|o| {
+                    o.kind(CommandOptionType::String).name("url").description(
+                        "The URL of tags to use (defaults to Danbooru safe if not specified)",
+                    )
+                });
+
+                o
             })
             .create_option(|o| {
                 o.kind(CommandOptionType::SubCommand)
@@ -46,15 +54,16 @@ pub async fn register(http: &Http) -> anyhow::Result<()> {
 }
 
 pub async fn wirehead(
+    http: Arc<Http>,
+    cmd: ApplicationCommandInteraction,
     sessions: &Mutex<HashMap<ChannelId, Session>>,
     client: Arc<sd::Client>,
     models: &[sd::Model],
-    http: Arc<Http>,
-    cmd: ApplicationCommandInteraction,
+    store: &store::Store,
 ) -> anyhow::Result<()> {
     let subcommand = &cmd.data.options[0];
     match subcommand.name.as_str() {
-        "start" => start(http, &cmd, subcommand, sessions, client, models).await,
+        "start" => start(http, &cmd, subcommand, sessions, client, models, store).await,
         "stop" => stop(&http, &cmd, sessions).await,
         _ => unreachable!(),
     }
@@ -67,6 +76,7 @@ async fn start(
     sessions: &Mutex<HashMap<ChannelId, Session>>,
     client: Arc<sd::Client>,
     models: &[sd::Model],
+    store: &store::Store,
 ) -> anyhow::Result<()> {
     if sessions.lock().contains_key(&cmd.channel_id) {
         cmd.create_interaction_response(&http, |response| {
@@ -118,20 +128,11 @@ async fn start(
             .collect()
     };
 
-    let model = models
-        .iter()
-        .find(|m| m.name.starts_with(MODEL_NAME_PREFIX))
-        .context("failed to find model")?;
+    let params = command::OwnedBaseGenerationParameters::load(cmd, store, models, false, false)?;
 
     sessions.lock().insert(
         cmd.channel_id,
-        super::Session::new(
-            http,
-            cmd.channel_id,
-            client.clone(),
-            Arc::new(model.clone()),
-            tags,
-        )?,
+        super::Session::new(http, cmd.channel_id, client.clone(), params, tags)?,
     );
     Ok(())
 }

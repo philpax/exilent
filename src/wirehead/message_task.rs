@@ -1,5 +1,5 @@
 use super::simulation::{AsPhenotype, FitnessStore, TextGenome};
-use crate::{constant, custom_id as cid};
+use crate::{command::OwnedBaseGenerationParameters, constant, custom_id as cid, util};
 use serenity::{
     http::Http,
     model::prelude::{component::ButtonStyle, ChannelId},
@@ -10,19 +10,12 @@ use std::sync::{
     Arc,
 };
 
-// stable diffusion config
-const WIDTH: u32 = 256;
-const HEIGHT: u32 = 256;
-const CFG_SCALE: f32 = 8.0;
-const SAMPLER: sd::Sampler = sd::Sampler::EulerA;
-const STEPS: u32 = 15;
-
 #[allow(clippy::too_many_arguments)]
 pub async fn task(
     http: Arc<Http>,
     channel_id: ChannelId,
     client: Arc<sd::Client>,
-    model: Arc<sd::Model>,
+    params: OwnedBaseGenerationParameters,
     fitness_store: Arc<FitnessStore>,
     shutdown: Arc<AtomicBool>,
     tags: Vec<String>,
@@ -34,7 +27,12 @@ pub async fn task(
         }
 
         if let Ok(result) = result_rx.try_recv() {
-            let image = generate(&client, (*model).clone(), result.as_text(&tags)).await?;
+            let image = generate(
+                &client,
+                params.as_base_generation_request(),
+                result.as_text(&tags),
+            )
+            .await?;
 
             channel_id
                 .send_files(http.as_ref(), [(image.as_slice(), "output.png")], |m| {
@@ -49,7 +47,12 @@ pub async fn task(
         let pending_requests = std::mem::take(&mut *fitness_store.pending_requests.lock());
 
         for genome in pending_requests {
-            let image = generate(&client, (*model).clone(), genome.as_text(&tags)).await?;
+            let image = generate(
+                &client,
+                params.as_base_generation_request(),
+                genome.as_text(&tags),
+            )
+            .await?;
 
             channel_id
                 .send_files(http.as_ref(), [(image.as_slice(), "output.png")], |m| {
@@ -95,7 +98,7 @@ pub async fn task(
 
 async fn generate(
     client: &sd::Client,
-    model: sd::Model,
+    base_generation_request: sd::BaseGenerationRequest,
     prompt: String,
 ) -> anyhow::Result<Vec<u8>> {
     pub fn encode_image_to_png_bytes(image: &image::DynamicImage) -> anyhow::Result<Vec<u8>> {
@@ -105,22 +108,16 @@ async fn generate(
         Ok(bytes)
     }
 
+    let prompt = match base_generation_request.model.as_ref() {
+        Some(model) => util::prepend_keyword_if_necessary(&prompt, &model.name),
+        None => prompt,
+    };
+
     let result = client
         .generate_from_text(&sd::TextToImageGenerationRequest {
             base: sd::BaseGenerationRequest {
                 prompt,
-                negative_prompt: None,
-                batch_size: Some(1),
-                batch_count: Some(1),
-                width: Some(WIDTH),
-                height: Some(HEIGHT),
-                cfg_scale: Some(CFG_SCALE),
-                denoising_strength: None,
-                eta: None,
-                sampler: Some(SAMPLER),
-                steps: Some(STEPS),
-                model: Some(model),
-                ..Default::default()
+                ..base_generation_request
             },
             ..Default::default()
         })?
