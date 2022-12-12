@@ -2,7 +2,7 @@ use crate::{constant, store::Store, util};
 use serenity::{
     builder::CreateApplicationCommandOption,
     model::prelude::{
-        command::CommandOptionType, interaction::application_command::ApplicationCommandInteraction,
+        command::CommandOptionType, interaction::application_command::CommandDataOption, UserId,
     },
 };
 use stable_diffusion_a1111_webui_client as sd;
@@ -167,7 +167,8 @@ pub struct OwnedBaseGenerationParameters {
 }
 impl OwnedBaseGenerationParameters {
     pub fn load(
-        aci: &ApplicationCommandInteraction,
+        user_id: UserId,
+        options: &[CommandDataOption],
         store: &Store,
         models: &[sd::Model],
         use_last_generation_for_size: bool,
@@ -178,7 +179,7 @@ impl OwnedBaseGenerationParameters {
             value_to_number, value_to_string,
         };
 
-        let prompt = get_value(aci, constant::value::PROMPT).and_then(value_to_string);
+        let prompt = get_value(options, constant::value::PROMPT).and_then(value_to_string);
         let prompt = if let Some(prompt) = prompt {
             prompt
         } else if enforce_prompt {
@@ -188,22 +189,22 @@ impl OwnedBaseGenerationParameters {
         };
 
         let negative_prompt =
-            get_value(aci, constant::value::NEGATIVE_PROMPT).and_then(value_to_string);
+            get_value(options, constant::value::NEGATIVE_PROMPT).and_then(value_to_string);
 
-        let seed = get_value(aci, constant::value::SEED).and_then(value_to_int);
+        let seed = get_value(options, constant::value::SEED).and_then(value_to_int);
 
-        let batch_count = get_value(aci, constant::value::COUNT)
+        let batch_count = get_value(options, constant::value::COUNT)
             .and_then(value_to_int)
             .map(|v| v as u32);
 
-        let last_generation = store.get_last_generation_for_user(aci.user.id)?;
+        let last_generation = store.get_last_generation_for_user(user_id)?;
         let last_generation = last_generation.as_ref();
 
-        let mut width = get_value(aci, constant::value::WIDTH)
+        let mut width = get_value(options, constant::value::WIDTH)
             .and_then(value_to_int)
             .map(|v| v as u32 / 64 * 64);
 
-        let mut height = get_value(aci, constant::value::HEIGHT)
+        let mut height = get_value(options, constant::value::HEIGHT)
             .and_then(value_to_int)
             .map(|v| v as u32 / 64 * 64);
 
@@ -212,36 +213,36 @@ impl OwnedBaseGenerationParameters {
             height = height.or_else(|| last_generation.map(|g| g.height));
         }
 
-        let cfg_scale = get_value(aci, constant::value::GUIDANCE_SCALE)
+        let cfg_scale = get_value(options, constant::value::GUIDANCE_SCALE)
             .and_then(value_to_number)
             .map(|v| v as f32)
             .or_else(|| last_generation.map(|g| g.cfg_scale));
 
-        let denoising_strength = get_value(aci, constant::value::DENOISING_STRENGTH)
+        let denoising_strength = get_value(options, constant::value::DENOISING_STRENGTH)
             .and_then(value_to_number)
             .map(|v| v as f32)
             .or_else(|| last_generation.map(|g| g.denoising_strength));
 
-        let steps = get_value(aci, constant::value::STEPS)
+        let steps = get_value(options, constant::value::STEPS)
             .and_then(value_to_int)
             .map(|v| v as u32)
             .or_else(|| last_generation.map(|g| g.steps));
 
-        let tiling = get_value(aci, constant::value::TILING)
+        let tiling = get_value(options, constant::value::TILING)
             .and_then(value_to_bool)
             .or_else(|| last_generation.map(|g| g.tiling));
 
-        let restore_faces = get_value(aci, constant::value::RESTORE_FACES)
+        let restore_faces = get_value(options, constant::value::RESTORE_FACES)
             .and_then(value_to_bool)
             .or_else(|| last_generation.map(|g| g.restore_faces));
 
-        let sampler = get_value(aci, constant::value::SAMPLER)
+        let sampler = get_value(options, constant::value::SAMPLER)
             .and_then(value_to_string)
             .and_then(|v| sd::Sampler::try_from(v.as_str()).ok())
             .or_else(|| last_generation.map(|g| g.sampler));
 
         let model = {
-            let model_params: Vec<_> = get_values_starting_with(aci, constant::value::MODEL)
+            let model_params: Vec<_> = get_values_starting_with(options, constant::value::MODEL)
                 .flat_map(value_to_string)
                 .collect();
             if model_params.len() > 1 {

@@ -363,8 +363,14 @@ pub async fn paint(
     interaction
         .create(http, "Paint request received, processing...")
         .await?;
-    let mut base_parameters =
-        command::OwnedBaseGenerationParameters::load(&aci, store, models, true, true)?;
+    let mut base_parameters = command::OwnedBaseGenerationParameters::load(
+        aci.user.id,
+        &aci.data.options,
+        store,
+        models,
+        true,
+        true,
+    )?;
 
     if let Some(model) = &base_parameters.model {
         base_parameters.prompt =
@@ -423,10 +429,16 @@ pub async fn paintover(
     interaction
         .create(http, "Paintover request received, processing...")
         .await?;
-    let mut base_parameters =
-        command::OwnedBaseGenerationParameters::load(&aci, store, models, false, true)?;
+    let mut base_parameters = command::OwnedBaseGenerationParameters::load(
+        aci.user.id,
+        &aci.data.options,
+        store,
+        models,
+        false,
+        true,
+    )?;
     let url = util::get_image_url(&aci)?;
-    let resize_mode = util::get_value(&aci, constant::value::RESIZE_MODE)
+    let resize_mode = util::get_value(&aci.data.options, constant::value::RESIZE_MODE)
         .and_then(util::value_to_string)
         .and_then(|s| sd::ResizeMode::try_from(s.as_str()).ok())
         .unwrap_or_default();
@@ -534,39 +546,41 @@ pub async fn postprocess(
     let bytes = reqwest::get(&url).await?.bytes().await?;
     let image = image::load_from_memory(&bytes)?;
 
-    let upscaler_1 = util::get_value(&aci, constant::value::UPSCALER_1)
+    let options = &aci.data.options;
+
+    let upscaler_1 = util::get_value(options, constant::value::UPSCALER_1)
         .and_then(util::value_to_string)
         .and_then(|v| sd::Upscaler::try_from(v.as_str()).ok())
         .context("expected upscaler 1")?;
 
-    let upscaler_2 = util::get_value(&aci, constant::value::UPSCALER_2)
+    let upscaler_2 = util::get_value(options, constant::value::UPSCALER_2)
         .and_then(util::value_to_string)
         .and_then(|v| sd::Upscaler::try_from(v.as_str()).ok())
         .context("expected upscaler 2")?;
 
-    let scale_factor = util::get_value(&aci, constant::value::SCALE_FACTOR)
+    let scale_factor = util::get_value(options, constant::value::SCALE_FACTOR)
         .and_then(util::value_to_number)
         .map(|n| n as f32)
         .context("expected scale factor")?;
 
-    let codeformer_visibility = util::get_value(&aci, constant::value::CODEFORMER_VISIBILITY)
+    let codeformer_visibility = util::get_value(options, constant::value::CODEFORMER_VISIBILITY)
         .and_then(util::value_to_number)
         .map(|n| n as f32);
 
-    let codeformer_weight = util::get_value(&aci, constant::value::CODEFORMER_WEIGHT)
+    let codeformer_weight = util::get_value(options, constant::value::CODEFORMER_WEIGHT)
         .and_then(util::value_to_number)
         .map(|n| n as f32);
 
-    let upscaler_2_visibility = util::get_value(&aci, constant::value::UPSCALER_2_VISIBILITY)
+    let upscaler_2_visibility = util::get_value(options, constant::value::UPSCALER_2_VISIBILITY)
         .and_then(util::value_to_number)
         .map(|n| n as f32);
 
-    let gfpgan_visibility = util::get_value(&aci, constant::value::GFPGAN_VISIBILITY)
+    let gfpgan_visibility = util::get_value(options, constant::value::GFPGAN_VISIBILITY)
         .and_then(util::value_to_number)
         .map(|n| n as f32);
 
     let upscale_first =
-        util::get_value(&aci, constant::value::UPSCALE_FIRST).and_then(util::value_to_bool);
+        util::get_value(options, constant::value::UPSCALE_FIRST).and_then(util::value_to_bool);
 
     let result = client
         .postprocess(
@@ -607,7 +621,7 @@ pub async fn interrogate(
 ) -> anyhow::Result<()> {
     let url = util::get_image_url(&aci)?;
 
-    let interrogator = util::get_value(&aci, constant::value::INTERROGATOR)
+    let interrogator = util::get_value(&aci.data.options, constant::value::INTERROGATOR)
         .and_then(util::value_to_string)
         .and_then(|v| sd::Interrogator::try_from(v.as_str()).ok())
         .context("expected interrogator")?;

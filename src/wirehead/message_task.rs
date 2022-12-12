@@ -20,6 +20,7 @@ pub async fn task(
     shutdown: Arc<AtomicBool>,
     tags: Vec<String>,
     result_rx: flume::Receiver<TextGenome>,
+    hide_prompt: bool,
 ) -> anyhow::Result<()> {
     loop {
         if shutdown.load(Ordering::SeqCst) {
@@ -27,18 +28,19 @@ pub async fn task(
         }
 
         if let Ok(result) = result_rx.try_recv() {
-            let image = generate(
-                &client,
-                params.as_base_generation_request(),
-                result.as_text(&tags),
-            )
-            .await?;
+            let prompt = result.as_text(&tags);
+            let image =
+                generate(&client, params.as_base_generation_request(), prompt.clone()).await?;
 
             channel_id
                 .send_files(http.as_ref(), [(image.as_slice(), "output.png")], |m| {
                     m.content(format!(
-                        "**Best result so far**: `{}`",
-                        result.as_text(&tags)
+                        "**Best result so far**{}",
+                        if !hide_prompt {
+                            format!(": `{}`", prompt)
+                        } else {
+                            String::new()
+                        }
                     ))
                 })
                 .await?;
@@ -56,36 +58,41 @@ pub async fn task(
 
             channel_id
                 .send_files(http.as_ref(), [(image.as_slice(), "output.png")], |m| {
-                    m.content(format!("`{}`", genome.as_text(&tags)))
-                        .components(|mc| {
-                            mc.create_action_row(|r| {
-                                r.create_button(|b| {
-                                    b.custom_id(cid::Wirehead::Negative2.to_id(genome.clone()))
-                                        .label("-2")
-                                        .style(ButtonStyle::Danger)
-                                })
-                                .create_button(|b| {
-                                    b.custom_id(cid::Wirehead::Negative1.to_id(genome.clone()))
-                                        .label("-1")
-                                        .style(ButtonStyle::Danger)
-                                })
-                                .create_button(|b| {
-                                    b.custom_id(cid::Wirehead::Zero.to_id(genome.clone()))
-                                        .label("0")
-                                        .style(ButtonStyle::Secondary)
-                                })
-                                .create_button(|b| {
-                                    b.custom_id(cid::Wirehead::Positive1.to_id(genome.clone()))
-                                        .label("1")
-                                        .style(ButtonStyle::Success)
-                                })
-                                .create_button(|b| {
-                                    b.custom_id(cid::Wirehead::Positive2.to_id(genome.clone()))
-                                        .label("2")
-                                        .style(ButtonStyle::Success)
-                                })
+                    m.components(|mc| {
+                        mc.create_action_row(|r| {
+                            r.create_button(|b| {
+                                b.custom_id(cid::Wirehead::Negative2.to_id(genome.clone()))
+                                    .label("-2")
+                                    .style(ButtonStyle::Danger)
+                            })
+                            .create_button(|b| {
+                                b.custom_id(cid::Wirehead::Negative1.to_id(genome.clone()))
+                                    .label("-1")
+                                    .style(ButtonStyle::Danger)
+                            })
+                            .create_button(|b| {
+                                b.custom_id(cid::Wirehead::Zero.to_id(genome.clone()))
+                                    .label("0")
+                                    .style(ButtonStyle::Secondary)
+                            })
+                            .create_button(|b| {
+                                b.custom_id(cid::Wirehead::Positive1.to_id(genome.clone()))
+                                    .label("1")
+                                    .style(ButtonStyle::Success)
+                            })
+                            .create_button(|b| {
+                                b.custom_id(cid::Wirehead::Positive2.to_id(genome.clone()))
+                                    .label("2")
+                                    .style(ButtonStyle::Success)
                             })
                         })
+                    });
+
+                    if !hide_prompt {
+                        m.content(format!("`{}`", genome.as_text(&tags)));
+                    }
+
+                    m
                 })
                 .await?;
         }

@@ -28,7 +28,7 @@ pub async fn rate(
     };
 
     // this is a bit of a contortion but it's fine for now
-    let tags = if let Some(session) = sessions.lock().get(&mci.channel_id) {
+    let (tags, hide_prompt) = if let Some(session) = sessions.lock().get(&mci.channel_id) {
         session.rate(
             id.clone(),
             match rating {
@@ -39,16 +39,24 @@ pub async fn rate(
                 cid::Wirehead::Positive2 => 100,
             },
         );
-        session.tags.clone()
+        (session.tags.clone(), session.hide_prompt)
     } else {
-        vec![]
+        (vec![], false)
     };
 
     mci.create_interaction_response(http, |m| {
         m.kind(InteractionResponseType::UpdateMessage)
             .interaction_response_data(|d| {
-                d.content(format!("`{}`: {}", id.as_text(&tags), rating.as_integer()))
-                    .components(|c| c.set_action_rows(vec![]))
+                d.content(format!(
+                    "{}**Rating**: {}",
+                    if !hide_prompt {
+                        format!("`{}`: | ", id.as_text(&tags))
+                    } else {
+                        String::new()
+                    },
+                    rating.as_integer()
+                ))
+                .components(|c| c.set_action_rows(vec![]))
             })
     })
     .await?;

@@ -1,4 +1,4 @@
-use crate::{command, constant, store};
+use crate::{command, constant, store, util};
 
 use super::Session;
 use parking_lot::Mutex;
@@ -35,9 +35,16 @@ pub async fn register(http: &Http, models: &[sd::Model]) -> anyhow::Result<()> {
                 );
 
                 o.create_sub_option(|o| {
-                    o.kind(CommandOptionType::String).name("url").description(
-                        "The URL of tags to use (defaults to Danbooru safe if not specified)",
-                    )
+                    o.kind(CommandOptionType::String)
+                        .name(constant::value::TAGS_URL)
+                        .description(
+                            "The URL of tags to use (defaults to Danbooru safe if not specified)",
+                        )
+                })
+                .create_sub_option(|o| {
+                    o.kind(CommandOptionType::Boolean)
+                        .name(constant::value::HIDE_PROMPT)
+                        .description("Whether or not to hide the prompt for generations")
                 });
 
                 o
@@ -90,12 +97,12 @@ async fn start(
         return Ok(());
     }
 
-    let url = subcommand
-        .options
-        .iter()
-        .find(|o| o.name == "url")
-        .and_then(|o| o.value.as_ref())
-        .and_then(|v| v.as_str());
+    let url = util::get_value(&subcommand.options, constant::value::TAGS_URL)
+        .and_then(util::value_to_string);
+
+    let hide_prompt = util::get_value(&subcommand.options, constant::value::HIDE_PROMPT)
+        .and_then(util::value_to_bool)
+        .unwrap_or(false);
 
     cmd.create_interaction_response(&http, |response| {
         response
@@ -103,7 +110,7 @@ async fn start(
             .interaction_response_data(|message| {
                 message.content(format!(
                     "Starting with {}...",
-                    if let Some(url) = url {
+                    if let Some(url) = url.as_deref() {
                         url
                     } else {
                         "Danbooru tags"
@@ -128,11 +135,25 @@ async fn start(
             .collect()
     };
 
-    let params = command::OwnedBaseGenerationParameters::load(cmd, store, models, false, false)?;
+    let params = command::OwnedBaseGenerationParameters::load(
+        cmd.user.id,
+        &subcommand.options,
+        store,
+        models,
+        false,
+        false,
+    )?;
 
     sessions.lock().insert(
         cmd.channel_id,
-        super::Session::new(http, cmd.channel_id, client.clone(), params, tags)?,
+        super::Session::new(
+            http,
+            cmd.channel_id,
+            client.clone(),
+            params,
+            tags,
+            hide_prompt,
+        )?,
     );
     Ok(())
 }

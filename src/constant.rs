@@ -57,6 +57,9 @@ pub mod value {
     pub const IMAGE_URL: &str = "image_url";
     pub const IMAGE_ATTACHMENT: &str = "image_attachment";
     pub const INTERROGATOR: &str = "interrogator";
+
+    pub const TAGS_URL: &str = "tags_url";
+    pub const HIDE_PROMPT: &str = "hide_prompt";
 }
 
 /// emojis

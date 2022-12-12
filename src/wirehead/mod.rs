@@ -18,6 +18,7 @@ pub struct Session {
     fitness_store: Arc<FitnessStore>,
     shutdown: Arc<AtomicBool>,
     pub tags: Vec<String>,
+    pub hide_prompt: bool,
 }
 impl Session {
     pub fn new(
@@ -26,6 +27,7 @@ impl Session {
         client: Arc<sd::Client>,
         params: OwnedBaseGenerationParameters,
         tags: Vec<String>,
+        hide_prompt: bool,
     ) -> anyhow::Result<Self> {
         let shutdown = Arc::new(AtomicBool::new(false));
         let fitness_store = Arc::new(FitnessStore::new(shutdown.clone()));
@@ -48,6 +50,7 @@ impl Session {
             shutdown.clone(),
             tags.clone(),
             result_rx,
+            hide_prompt,
         ));
 
         Ok(Self {
@@ -56,6 +59,7 @@ impl Session {
             fitness_store,
             shutdown,
             tags,
+            hide_prompt,
         })
     }
 

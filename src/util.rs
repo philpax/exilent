@@ -5,7 +5,9 @@ use serenity::{
     model::{
         prelude::{
             interaction::{
-                application_command::{ApplicationCommandInteraction, CommandDataOptionValue},
+                application_command::{
+                    ApplicationCommandInteraction, CommandDataOption, CommandDataOptionValue,
+                },
                 message_component::MessageComponentInteraction,
                 modal::ModalSubmitInteraction,
                 InteractionResponseType,
@@ -19,22 +21,20 @@ use serenity::{
 use crate::{constant, sd};
 
 pub fn get_value<'a>(
-    cmd: &'a ApplicationCommandInteraction,
+    options: &'a [CommandDataOption],
     name: &'a str,
 ) -> Option<&'a CommandDataOptionValue> {
-    cmd.data
-        .options
+    options
         .iter()
         .find(|v| v.name == name)
         .and_then(|v| v.resolved.as_ref())
 }
 
 pub fn get_values_starting_with<'a>(
-    cmd: &'a ApplicationCommandInteraction,
+    options: &'a [CommandDataOption],
     name: &'a str,
 ) -> impl Iterator<Item = &'a CommandDataOptionValue> {
-    cmd.data
-        .options
+    options
         .iter()
         .filter(move |v| v.name.starts_with(name))
         .flat_map(|v| v.resolved.as_ref())
@@ -76,10 +76,11 @@ pub fn value_to_attachment_url(v: &CommandDataOptionValue) -> Option<String> {
 }
 
 pub fn get_image_url(aci: &ApplicationCommandInteraction) -> anyhow::Result<String> {
-    let image_attachment_url =
-        get_value(aci, constant::value::IMAGE_ATTACHMENT).and_then(value_to_attachment_url);
+    let image_attachment_url = get_value(&aci.data.options, constant::value::IMAGE_ATTACHMENT)
+        .and_then(value_to_attachment_url);
 
-    let image_url = get_value(aci, constant::value::IMAGE_URL).and_then(value_to_string);
+    let image_url =
+        get_value(&aci.data.options, constant::value::IMAGE_URL).and_then(value_to_string);
 
     image_attachment_url
         .or(image_url)
