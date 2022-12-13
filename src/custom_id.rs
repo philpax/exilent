@@ -9,20 +9,13 @@ const INTERROGATION_PREFIX: &str = "int";
 const WIREHEAD_PREFIX: &str = "wh";
 
 macro_rules! implement_custom_id_component {
-    ($name:ident, $id_type:ty, $(($member:ident, $const:ident, $segment:literal)),*) => {
+    ($name:ident, $(($member:ident, $const:ident, $segment:literal)),*) => {
         #[derive(Clone, Copy)]
         pub enum $name {
             $($member,)*
         }
         impl $name {
             $(const $const: &str = $segment;)*
-
-            pub fn to_id(self, id: $id_type) -> CustomId {
-                CustomId::$name {
-                    id,
-                    value: self,
-                }
-            }
         }
         impl TryFrom<&str> for $name {
             type Error = anyhow::Error;
@@ -50,7 +43,6 @@ macro_rules! implement_custom_id_component {
 
 implement_custom_id_component!(
     Generation,
-    i64,
     (Retry, GENERATION_RETRY, "retry"),
     (
         RetryWithOptions,
@@ -76,10 +68,14 @@ implement_custom_id_component!(
         "interrogate_dd"
     )
 );
+impl Generation {
+    pub fn to_id(self, id: i64) -> CustomId {
+        CustomId::Generation { id, value: self }
+    }
+}
 
 implement_custom_id_component!(
     Interrogation,
-    i64,
     (Generate, INTERROGATION_GENERATE, "generate"),
     (
         ReinterrogateWithClip,
@@ -92,24 +88,61 @@ implement_custom_id_component!(
         "reint_dd"
     )
 );
+impl Interrogation {
+    pub fn to_id(self, id: i64) -> CustomId {
+        CustomId::Interrogation { id, value: self }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct Wirehead {
+    pub value: WireheadValue,
+    pub seed: i64,
+}
+impl Wirehead {
+    const SEPARATOR: char = '!';
+}
+impl TryFrom<&str> for Wirehead {
+    type Error = anyhow::Error;
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let (prefix, suffix) = value.split_once(Self::SEPARATOR).context("no separator")?;
+        Ok(Self {
+            value: prefix.try_into()?,
+            seed: suffix.parse()?,
+        })
+    }
+}
+impl Display for Wirehead {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}{}", self.value, Self::SEPARATOR, self.seed)
+    }
+}
 
 implement_custom_id_component!(
-    Wirehead,
-    TextGenome,
+    WireheadValue,
     (Negative2, WIREHEAD_NEGATIVE2, "n2"),
     (Negative1, WIREHEAD_NEGATIVE1, "n1"),
     (Zero, WIREHEAD_ZERO, "z"),
     (Positive1, WIREHEAD_POSITIVE1, "p1"),
-    (Positive2, WIREHEAD_POSITIVE2, "p2")
+    (Positive2, WIREHEAD_POSITIVE2, "p2"),
+    (ToExilent, WIREHEAD_TO_EXILENT, "to_exilent")
 );
-impl Wirehead {
+impl WireheadValue {
+    pub fn to_id(self, id: TextGenome, seed: i64) -> CustomId {
+        CustomId::Wirehead {
+            genome: id,
+            value: Wirehead { value: self, seed },
+        }
+    }
+
     pub fn as_integer(&self) -> i32 {
         match self {
-            Wirehead::Negative2 => -2,
-            Wirehead::Negative1 => -1,
-            Wirehead::Zero => 0,
-            Wirehead::Positive1 => 1,
-            Wirehead::Positive2 => 2,
+            WireheadValue::Negative2 => -2,
+            WireheadValue::Negative1 => -1,
+            WireheadValue::Zero => 0,
+            WireheadValue::Positive1 => 1,
+            WireheadValue::Positive2 => 2,
+            WireheadValue::ToExilent { .. } => unreachable!(),
         }
     }
 }
@@ -117,7 +150,7 @@ impl Wirehead {
 pub enum CustomId {
     Generation { id: i64, value: Generation },
     Interrogation { id: i64, value: Interrogation },
-    Wirehead { id: TextGenome, value: Wirehead },
+    Wirehead { genome: TextGenome, value: Wirehead },
 }
 impl TryFrom<&str> for CustomId {
     type Error = anyhow::Error;
@@ -138,7 +171,7 @@ impl TryFrom<&str> for CustomId {
                 value: Interrogation::try_from(cmd)?,
             },
             WIREHEAD_PREFIX => Self::Wirehead {
-                id: hex_to_genome(id),
+                genome: hex_to_genome(id),
                 value: Wirehead::try_from(cmd)?,
             },
             _ => anyhow::bail!("invalid custom id prefix: {prefix}"),
@@ -169,7 +202,7 @@ impl Display for CustomId {
                 )
             }
             CustomId::Wirehead {
-                id,
+                genome: id,
                 value: wirehead,
             } => {
                 write!(

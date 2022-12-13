@@ -256,9 +256,22 @@ impl EventHandler for Handler {
                             .await
                         }
                     },
-                    cid::CustomId::Wirehead { id, value } => {
-                        whmc::rate(&self.sessions, http, mci, id, value).await
-                    }
+                    cid::CustomId::Wirehead { genome, value } => match value.value {
+                        cid::WireheadValue::ToExilent => {
+                            whmc::to_exilent(
+                                &self.sessions,
+                                &self.client,
+                                &self.models,
+                                &self.store,
+                                http,
+                                mci,
+                                genome,
+                                value.seed,
+                            )
+                            .await
+                        }
+                        _ => whmc::rate(&self.sessions, http, mci, genome, value).await,
+                    },
                 }
             }
             Interaction::ModalSubmit(msi) => {

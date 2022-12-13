@@ -19,13 +19,14 @@ pub struct Session {
     shutdown: Arc<AtomicBool>,
     pub tags: Vec<String>,
     pub hide_prompt: bool,
+    pub parameters: OwnedBaseGenerationParameters,
 }
 impl Session {
     pub fn new(
         http: Arc<Http>,
         channel_id: ChannelId,
         client: Arc<sd::Client>,
-        params: OwnedBaseGenerationParameters,
+        parameters: OwnedBaseGenerationParameters,
         tags: Vec<String>,
         hide_prompt: bool,
     ) -> anyhow::Result<Self> {
@@ -45,7 +46,7 @@ impl Session {
             http,
             channel_id,
             client,
-            params,
+            parameters.clone(),
             fitness_store.clone(),
             shutdown.clone(),
             tags.clone(),
@@ -60,6 +61,7 @@ impl Session {
             shutdown,
             tags,
             hide_prompt,
+            parameters,
         })
     }
 
