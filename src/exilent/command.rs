@@ -363,18 +363,20 @@ pub async fn paint(
     interaction
         .create(http, "Paint request received, processing...")
         .await?;
-    let mut base_parameters = command::OwnedBaseGenerationParameters::load(
-        aci.user.id,
-        &aci.data.options,
-        store,
-        models,
-        true,
-        true,
-    )?;
 
-    if let Some(model) = &base_parameters.model {
-        base_parameters.prompt =
-            util::prepend_keyword_if_necessary(&base_parameters.prompt, &model.name);
+    let base = {
+        let base_parameters = command::OwnedBaseGenerationParameters::load(
+            aci.user.id,
+            &aci.data.options,
+            store,
+            models,
+            true,
+            true,
+        )?;
+
+        let mut base = base_parameters.as_base_generation_request();
+        util::fixup_base_generation_request(&mut base);
+        base
     };
 
     interaction
@@ -382,37 +384,26 @@ pub async fn paint(
             http,
             &format!(
                 "`{}`{}: Generating...",
-                &base_parameters.prompt,
-                base_parameters
-                    .negative_prompt
-                    .as_deref()
+                &base.prompt,
+                base.negative_prompt
+                    .as_ref()
                     .map(|s| format!(" - `{s}`"))
                     .unwrap_or_default()
             ),
         )
         .await?;
 
-    if let Some((width, height)) = base_parameters
-        .width
-        .as_mut()
-        .zip(base_parameters.height.as_mut())
-    {
-        (*width, *height) = util::fixup_resolution(*width, *height);
-    }
-
+    let (prompt, negative_prompt) = (base.prompt.clone(), base.negative_prompt.clone());
     issuer::generation_task(
         client.generate_from_text(&sd::TextToImageGenerationRequest {
-            base: base_parameters.as_base_generation_request(),
+            base,
             ..Default::default()
         })?,
         models,
         store,
         http,
         interaction,
-        (
-            &base_parameters.prompt,
-            base_parameters.negative_prompt.as_deref(),
-        ),
+        (&prompt, negative_prompt.as_deref()),
         None,
     )
     .await
@@ -429,23 +420,34 @@ pub async fn paintover(
     interaction
         .create(http, "Paintover request received, processing...")
         .await?;
-    let mut base_parameters = command::OwnedBaseGenerationParameters::load(
-        aci.user.id,
-        &aci.data.options,
-        store,
-        models,
-        false,
-        true,
-    )?;
+
     let url = util::get_image_url(&aci)?;
     let resize_mode = util::get_value(&aci.data.options, constant::value::RESIZE_MODE)
         .and_then(util::value_to_string)
         .and_then(|s| sd::ResizeMode::try_from(s.as_str()).ok())
         .unwrap_or_default();
 
-    if let Some(model) = &base_parameters.model {
-        base_parameters.prompt =
-            util::prepend_keyword_if_necessary(&base_parameters.prompt, &model.name);
+    let bytes = reqwest::get(&url).await?.bytes().await?;
+    let image = image::load_from_memory(&bytes)?;
+
+    let base = {
+        let mut base_parameters = command::OwnedBaseGenerationParameters::load(
+            aci.user.id,
+            &aci.data.options,
+            store,
+            models,
+            false,
+            true,
+        )?;
+        if base_parameters.width.is_none() {
+            base_parameters.width = Some(image.width());
+        }
+        if base_parameters.height.is_none() {
+            base_parameters.height = Some(image.height());
+        }
+        let mut base_generation_request = base_parameters.as_base_generation_request();
+        util::fixup_base_generation_request(&mut base_generation_request);
+        base_generation_request
     };
 
     interaction
@@ -453,9 +455,8 @@ pub async fn paintover(
             http,
             &format!(
                 "`{}`{}: Painting over {}...",
-                &base_parameters.prompt,
-                base_parameters
-                    .negative_prompt
+                &base.prompt,
+                base.negative_prompt
                     .as_deref()
                     .map(|s| format!(" - `{s}`"))
                     .unwrap_or_default(),
@@ -464,27 +465,10 @@ pub async fn paintover(
         )
         .await?;
 
-    let bytes = reqwest::get(&url).await?.bytes().await?;
-    let image = image::load_from_memory(&bytes)?;
-
-    if base_parameters.width.is_none() {
-        base_parameters.width = Some(image.width());
-    }
-    if base_parameters.height.is_none() {
-        base_parameters.height = Some(image.height());
-    }
-
-    if let Some((width, height)) = base_parameters
-        .width
-        .as_mut()
-        .zip(base_parameters.height.as_mut())
-    {
-        (*width, *height) = util::fixup_resolution(*width, *height);
-    }
-
+    let (prompt, negative_prompt) = (base.prompt.clone(), base.negative_prompt.clone());
     issuer::generation_task(
         client.generate_from_image_and_text(&sd::ImageToImageGenerationRequest {
-            base: base_parameters.as_base_generation_request(),
+            base,
             images: vec![image.clone()],
             resize_mode: Some(resize_mode),
             ..Default::default()
@@ -493,10 +477,7 @@ pub async fn paintover(
         store,
         http,
         interaction,
-        (
-            &base_parameters.prompt,
-            base_parameters.negative_prompt.as_deref(),
-        ),
+        (&prompt, negative_prompt.as_deref()),
         Some(store::ImageGeneration {
             init_image: image.clone(),
             init_url: url.clone(),

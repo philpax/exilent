@@ -222,58 +222,58 @@ pub async fn interrogate_generate(
         .get_interrogation(id)?
         .context("no interrogation found")?;
 
-    // always applied
-    let prompt = interrogation.result;
-    let prompt = if let sd::Interrogator::DeepDanbooru = interrogation.interrogator {
-        let mut components: Vec<_> = prompt.split(", ").collect();
-        components.shuffle(&mut rand::thread_rng());
-        components.join(", ")
-    } else {
-        prompt
-    };
-
     // use last generation as default if available
     let last_generation = store.get_last_generation_for_user(interaction.user().id)?;
     let last_generation = last_generation.as_ref();
 
-    let width = last_generation.map(|g| g.width);
-    let height = last_generation.map(|g| g.height);
-    let cfg_scale = last_generation.map(|g| g.cfg_scale);
-    let steps = last_generation.map(|g| g.steps);
-    let tiling = last_generation.map(|g| g.tiling);
-    let restore_faces = last_generation.map(|g| g.restore_faces);
-    let sampler = last_generation.map(|g| g.sampler);
-    let model =
-        last_generation.and_then(|g| util::find_model_by_hash(models, &g.model_hash).map(|t| t.1));
+    let base = {
+        // always applied
+        let prompt = interrogation.result;
+        let prompt = if let sd::Interrogator::DeepDanbooru = interrogation.interrogator {
+            let mut components: Vec<_> = prompt.split(", ").collect();
+            components.shuffle(&mut rand::thread_rng());
+            components.join(", ")
+        } else {
+            prompt
+        };
 
-    let prompt = if let Some(model) = &model {
-        util::prepend_keyword_if_necessary(&prompt, &model.name)
-    } else {
-        prompt
+        let width = last_generation.map(|g| g.width);
+        let height = last_generation.map(|g| g.height);
+        let cfg_scale = last_generation.map(|g| g.cfg_scale);
+        let steps = last_generation.map(|g| g.steps);
+        let tiling = last_generation.map(|g| g.tiling);
+        let restore_faces = last_generation.map(|g| g.restore_faces);
+        let sampler = last_generation.map(|g| g.sampler);
+        let model = last_generation
+            .and_then(|g| util::find_model_by_hash(models, &g.model_hash).map(|t| t.1));
+
+        interaction
+            .edit(http, &format!("`{prompt}`: Generating..."))
+            .await?;
+
+        let mut base = sd::BaseGenerationRequest {
+            prompt: prompt.clone(),
+            negative_prompt: None,
+            seed: None,
+            batch_size: Some(1),
+            batch_count: Some(1),
+            width,
+            height,
+            cfg_scale,
+            steps,
+            tiling,
+            restore_faces,
+            sampler,
+            model,
+            ..Default::default()
+        };
+        util::fixup_base_generation_request(&mut base);
+        base
     };
-
-    interaction
-        .edit(http, &format!("`{prompt}`: Generating..."))
-        .await?;
-
+    let prompt = base.prompt.clone();
     issuer::generation_task(
         client.generate_from_text(&sd::TextToImageGenerationRequest {
-            base: sd::BaseGenerationRequest {
-                prompt: prompt.clone(),
-                negative_prompt: None,
-                seed: None,
-                batch_size: Some(1),
-                batch_count: Some(1),
-                width,
-                height,
-                cfg_scale,
-                steps,
-                tiling,
-                restore_faces,
-                sampler,
-                model,
-                ..Default::default()
-            },
+            base,
             ..Default::default()
         })?,
         models,
@@ -446,9 +446,7 @@ async fn retry_impl(
         if let Some(denoising_strength) = overrides.denoising_strength {
             base.denoising_strength = Some(denoising_strength as f32);
         }
-        if let Some(model) = &base.model {
-            base.prompt = util::prepend_keyword_if_necessary(&base.prompt, &model.name);
-        };
+        util::fixup_base_generation_request(base);
     }
     interaction
         .edit(
@@ -511,13 +509,6 @@ impl<'a> Overrides<'a> {
         paintover: bool,
     ) -> Self {
         use constant::limits as L;
-
-        let (width, height) = if let (Some(width), Some(height)) = (width, height) {
-            let (width, height) = util::fixup_resolution(width, height);
-            (Some(width), Some(height))
-        } else {
-            (None, None)
-        };
 
         Self {
             prompt: prompt.filter(|s| !s.is_empty()),

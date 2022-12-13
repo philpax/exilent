@@ -124,7 +124,51 @@ pub fn encode_image_to_png_bytes(image: image::DynamicImage) -> anyhow::Result<V
     Ok(bytes)
 }
 
-pub fn fixup_resolution(width: u32, height: u32) -> (u32, u32) {
+pub fn fixup_base_generation_request(params: &mut sd::BaseGenerationRequest) {
+    if let Some(model) = params.model.as_ref() {
+        params.prompt = prepend_keyword_if_necessary(&params.prompt, &model.name);
+    }
+
+    if let Some((width, height)) = params.width.as_mut().zip(params.height.as_mut()) {
+        (*width, *height) = fixup_resolution(*width, *height);
+    }
+}
+
+fn extract_keywords(model_name: &str) -> Vec<&str> {
+    let left_index = model_name.rfind('[');
+    let right_index = model_name.rfind(']');
+    if let Some((left, right)) = left_index.zip(right_index) {
+        model_name[left + 1..right]
+            .split(',')
+            .map(|s| s.trim())
+            .collect()
+    } else {
+        vec![]
+    }
+}
+
+fn prepend_keyword_if_necessary(prompt: &str, model_name: &str) -> String {
+    if !constant::config::AUTOMATICALLY_PREPEND_KEYWORD {
+        return prompt.to_string();
+    }
+
+    prepend_keyword_if_necessary_unchecked(prompt, model_name)
+}
+
+fn prepend_keyword_if_necessary_unchecked(prompt: &str, model_name: &str) -> String {
+    let keywords = extract_keywords(model_name);
+    if let [keyword] = keywords.as_slice() {
+        if prompt.contains(keyword) {
+            prompt.to_string()
+        } else {
+            format!("{}, {}", keyword, prompt)
+        }
+    } else {
+        prompt.to_string()
+    }
+}
+
+fn fixup_resolution(width: u32, height: u32) -> (u32, u32) {
     use constant::limits::{HEIGHT_MAX, WIDTH_MAX};
 
     let mut width = width;
@@ -147,40 +191,6 @@ pub fn fixup_resolution(width: u32, height: u32) -> (u32, u32) {
         ((width + ROUND_PRECISION / 2) / ROUND_PRECISION) * ROUND_PRECISION,
         ((height + ROUND_PRECISION / 2) / ROUND_PRECISION) * ROUND_PRECISION,
     )
-}
-
-pub fn extract_keywords(model_name: &str) -> Vec<&str> {
-    let left_index = model_name.rfind('[');
-    let right_index = model_name.rfind(']');
-    if let Some((left, right)) = left_index.zip(right_index) {
-        model_name[left + 1..right]
-            .split(',')
-            .map(|s| s.trim())
-            .collect()
-    } else {
-        vec![]
-    }
-}
-
-pub fn prepend_keyword_if_necessary(prompt: &str, model_name: &str) -> String {
-    if !constant::config::AUTOMATICALLY_PREPEND_KEYWORD {
-        return prompt.to_string();
-    }
-
-    prepend_keyword_if_necessary_unchecked(prompt, model_name)
-}
-
-fn prepend_keyword_if_necessary_unchecked(prompt: &str, model_name: &str) -> String {
-    let keywords = extract_keywords(model_name);
-    if let [keyword] = keywords.as_slice() {
-        if prompt.contains(keyword) {
-            prompt.to_string()
-        } else {
-            format!("{}, {}", keyword, prompt)
-        }
-    } else {
-        prompt.to_string()
-    }
 }
 
 #[cfg(test)]

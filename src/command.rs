@@ -150,6 +150,7 @@ pub fn populate_generate_options(
     }
 }
 
+#[derive(Clone)]
 pub struct OwnedBaseGenerationParameters {
     pub prompt: String,
     pub negative_prompt: Option<String>,
