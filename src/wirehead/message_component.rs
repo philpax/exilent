@@ -7,6 +7,7 @@ use serenity::{
         interaction::{message_component::MessageComponentInteraction, InteractionResponseType},
         ChannelId,
     },
+    prelude::Mentionable,
 };
 use std::collections::HashMap;
 
@@ -48,13 +49,14 @@ pub async fn rate(
         m.kind(InteractionResponseType::UpdateMessage)
             .interaction_response_data(|d| {
                 d.content(format!(
-                    "{}**Rating**: {}",
+                    "{}**Rating**: {} by {}",
                     if !hide_prompt {
                         format!("`{}`: | ", id.as_text(&tags))
                     } else {
                         String::new()
                     },
-                    rating.as_integer()
+                    rating.as_integer(),
+                    mci.user.mention(),
                 ))
                 .components(|c| c.set_action_rows(vec![]))
             })
