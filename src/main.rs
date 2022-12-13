@@ -1,4 +1,8 @@
-use std::{collections::HashMap, env, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    env,
+    sync::Arc,
+};
 
 use anyhow::Context as AnyhowContext;
 use dotenv::dotenv;
@@ -6,7 +10,10 @@ use parking_lot::Mutex;
 use serenity::{
     async_trait,
     client::{Context, EventHandler},
-    model::{application::interaction::Interaction, prelude::*},
+    model::{
+        application::interaction::Interaction,
+        prelude::{command::Command, *},
+    },
     Client,
 };
 
@@ -78,6 +85,29 @@ struct Handler {
 impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
+
+        let registered_commands: HashSet<String> =
+            Command::get_global_application_commands(&ctx.http)
+                .await
+                .unwrap()
+                .iter()
+                .map(|c| c.name.clone())
+                .collect();
+
+        let our_commands: HashSet<String> = constant::command::COMMANDS
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+
+        if registered_commands != our_commands {
+            // If the commands registered with Discord don't match the commands configured
+            // for this bot, reset them entirely.
+            Command::set_global_application_commands(&ctx.http, |c| {
+                c.set_application_commands(vec![])
+            })
+            .await
+            .unwrap();
+        }
 
         exilent::command::register(&ctx.http, &self.models)
             .await

@@ -22,6 +22,17 @@ pub mod command {
     pub const EXILENT: &str = "exilent";
     pub const PNG_INFO: &str = "pnginfo";
     pub const WIREHEAD: &str = "wirehead";
+
+    pub const COMMANDS: &[&str] = &[
+        PAINT,
+        PAINTOVER,
+        PAINTAGAIN,
+        POSTPROCESS,
+        INTERROGATE,
+        EXILENT,
+        PNG_INFO,
+        WIREHEAD,
+    ];
 }
 
 /// names of values used in interactions
