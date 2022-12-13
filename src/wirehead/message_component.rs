@@ -107,7 +107,7 @@ pub async fn rate(
                 d.content(format!(
                     "{}**Rating**: {} by {}",
                     if !hide_prompt {
-                        format!("`{}`: | ", genome.as_text(&tags))
+                        format!("`{}` | ", genome.as_text(&tags))
                     } else {
                         String::new()
                     },
