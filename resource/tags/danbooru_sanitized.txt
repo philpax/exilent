@@ -1,3 +1,5 @@
+// Full list extracted from DeepDanbooru model, with *most* NSFW terms removed
+// This isn't completely safe. Feel free to open PRs if you find something weird!
 0_0
 1boy
 1girl
@@ -451,7 +453,6 @@ battleship
 bayonet
 bc_freedom_military_uniform
 bc_freedom_school_uniform
-bdsm
 beach
 beach_chair
 beach_towel
@@ -4979,7 +4980,6 @@ subtitled
 suction_cups
 sugar_cube
 suggestive_fluid
-suicide
 suit
 suit_jacket
 suitcase

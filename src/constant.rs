@@ -147,12 +147,12 @@ pub mod resource {
 
     /// Danbooru tags
     pub static DANBOORU_TAGS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
-        include_str!("../resource/tags.txt")
+        include_str!("../resource/tags/danbooru_sanitized.txt")
             .lines()
             .map(|l| l.trim())
             .collect()
     });
 
     /// Image to show when generation fails
-    pub const GENERATION_FAILED_IMAGE: &[u8] = include_bytes!("../resource/generation-failed.png");
+    pub const GENERATION_FAILED_IMAGE: &[u8] = include_bytes!("../resource/generation_failed.png");
 }
