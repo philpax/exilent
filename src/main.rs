@@ -33,6 +33,7 @@ use store::Store;
 async fn main() -> anyhow::Result<()> {
     dotenv().ok();
 
+    constant::resource::write_assets()?;
     let client = {
         let sd_url = env::var("SD_URL").context("SD_URL not specified")?;
         let sd_authentication = env::var("SD_USER").ok().zip(env::var("SD_PASS").ok());

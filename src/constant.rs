@@ -143,7 +143,37 @@ pub mod misc {
 /// resource
 pub mod resource {
     use once_cell::sync::Lazy;
-    use std::collections::HashSet;
+    use std::{collections::HashSet, path::Path};
+
+    pub fn write_assets() -> anyhow::Result<()> {
+        fn write_file<C: AsRef<[u8]>>(path: impl AsRef<Path>, contents: C) -> anyhow::Result<()> {
+            let path = path.as_ref();
+            if !path.exists() {
+                std::fs::write(path, contents)?;
+            }
+            Ok(())
+        }
+
+        let assets_dir = std::path::Path::new("assets");
+        std::fs::create_dir_all(assets_dir)?;
+        write_file(
+            assets_dir.join("generation_failed.png"),
+            include_bytes!("../resource/generation_failed.png"),
+        )?;
+
+        let tags_dir = assets_dir.join("tags");
+        std::fs::create_dir_all(&tags_dir)?;
+        write_file(
+            tags_dir.join("cadaeic_tags.txt"),
+            include_str!("../resource/tags/cadaeic_tags.txt"),
+        )?;
+        write_file(
+            tags_dir.join("danbooru_sanitized.txt"),
+            include_str!("../resource/tags/danbooru_sanitized.txt"),
+        )?;
+
+        Ok(())
+    }
 
     /// Danbooru tags
     pub static DANBOORU_TAGS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
