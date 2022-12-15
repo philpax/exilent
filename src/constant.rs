@@ -1,5 +1,8 @@
 /// config
 pub mod config {
+    use once_cell::sync::Lazy;
+    use std::collections::HashSet;
+
     /// If set, Exilent will remove any tags in DeepDanbooru results that aren't
     /// present in safe_tags.txt.
     pub const USE_SAFE_TAGS: bool = true;
@@ -10,6 +13,28 @@ pub mod config {
     /// Inkpunk v2 [nvinkpunk] will add `nvinkpunk` to the start of a prompt.
     /// This does not work if there is more than one keyword.
     pub const AUTOMATICALLY_PREPEND_KEYWORD: bool = true;
+
+    /// If you have too many models, Discord will refuse to register commands as
+    /// the combined length is too long. You can use this to blacklist models
+    /// that you don't care about having Discord access to.
+    pub static HIDE_MODELS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+        HashSet::from_iter([
+            "916ea38c", // All-In-One Pixel
+            "be7ddafc", // Classic Animation
+            "8b3c8f11", // Comic
+            "dcdf0425", // Cyberpunk Anime
+            "a48a2a1b", // Ghibli
+            "9ef9f138", // Gigafractal v1
+            "94674f07", // Inkpunk v1
+            "ddc6edf2", // Openjourney
+            "aa212ec6", // PixelArt Spritesheet
+            "74f4c61c", // Redshift
+            "41fef4bd", // Robo v1
+            "7460a6fa", // Stable v1.4
+            "3e16efc8", // Stable v1.5 inpainting
+            "50444ca2", // Tron Legacy
+        ])
+    });
 }
 
 /// discord command names

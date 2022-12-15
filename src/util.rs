@@ -110,10 +110,7 @@ pub fn find_model_by_hash(models: &[sd::Model], model_hash: &str) -> Option<(usi
     models
         .iter()
         .enumerate()
-        .find(|(_, m)| {
-            let Some(hash_wrapped) = m.title.split_ascii_whitespace().last() else { return false };
-            &hash_wrapped[1..hash_wrapped.len() - 1] == model_hash
-        })
+        .find(|(_, m)| extract_last_bracketed_string(&m.title) == Some(model_hash))
         .map(|(idx, model)| (idx, model.clone()))
 }
 
@@ -134,17 +131,16 @@ pub fn fixup_base_generation_request(params: &mut sd::BaseGenerationRequest) {
     }
 }
 
+pub fn extract_last_bracketed_string(string: &str) -> Option<&str> {
+    let left = string.rfind('[')?;
+    let right = string.rfind(']')?;
+    (left < right).then_some(&string[left + 1..right])
+}
+
 fn extract_keywords(model_name: &str) -> Vec<&str> {
-    let left_index = model_name.rfind('[');
-    let right_index = model_name.rfind(']');
-    if let Some((left, right)) = left_index.zip(right_index) {
-        model_name[left + 1..right]
-            .split(',')
-            .map(|s| s.trim())
-            .collect()
-    } else {
-        vec![]
-    }
+    extract_last_bracketed_string(model_name)
+        .map(|s| s.split(',').map(|s| s.trim()).collect())
+        .unwrap_or_default()
 }
 
 fn prepend_keyword_if_necessary(prompt: &str, model_name: &str) -> String {

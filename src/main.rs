@@ -47,7 +47,15 @@ async fn main() -> anyhow::Result<()> {
             .await?,
         )
     };
-    let models = client.models().await?;
+    let models: Vec<_> = client
+        .models()
+        .await?
+        .into_iter()
+        .filter(|m| {
+            !constant::config::HIDE_MODELS
+                .contains(util::extract_last_bracketed_string(&m.title).unwrap())
+        })
+        .collect();
     let store = Store::load()?;
 
     // Build our client.
