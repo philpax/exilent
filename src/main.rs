@@ -16,8 +16,10 @@ use serenity::{
     },
     Client,
 };
+use stable_diffusion_a1111_webui_client as sd;
 
 mod command;
+mod config;
 mod constant;
 mod custom_id;
 mod exilent;
@@ -25,8 +27,8 @@ mod store;
 mod util;
 mod wirehead;
 
+use config::Configuration;
 use custom_id as cid;
-use stable_diffusion_a1111_webui_client as sd;
 use store::Store;
 
 #[tokio::main]
@@ -34,6 +36,8 @@ async fn main() -> anyhow::Result<()> {
     dotenv().ok();
 
     constant::resource::write_assets()?;
+    Configuration::init()?;
+
     let client = {
         let sd_url = env::var("SD_URL").context("SD_URL not specified")?;
         let sd_authentication = env::var("SD_USER").ok().zip(env::var("SD_PASS").ok());
