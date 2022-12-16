@@ -32,7 +32,7 @@ pub mod value {
     pub const IMAGE_ATTACHMENT: &str = "image_attachment";
     pub const INTERROGATOR: &str = "interrogator";
 
-    pub const TAGS_URL: &str = "tags_url";
+    pub const TAGS: &str = "tags";
     pub const HIDE_PROMPT: &str = "hide_prompt";
 
     /// Discord allows for a maximum of 25 options in a choice

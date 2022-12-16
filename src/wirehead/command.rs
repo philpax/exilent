@@ -1,6 +1,12 @@
-use crate::{command, config::Configuration, constant, store, util};
+use crate::{
+    command,
+    config::Configuration,
+    constant, store,
+    util::{self, DiscordInteraction},
+};
 
 use super::Session;
+use anyhow::Context;
 use parking_lot::Mutex;
 use serenity::{
     http::Http,
@@ -26,6 +32,19 @@ pub async fn register(http: &Http, models: &[sd::Model]) -> anyhow::Result<()> {
                     .name("start")
                     .description("Start a Wirehead session (if not already running)");
 
+                o.create_sub_option(|o| {
+                    o.kind(CommandOptionType::String)
+                        .name(constant::value::TAGS)
+                        .description("The tags to use for generation")
+                        .required(true);
+
+                    for tag_list_name in Configuration::get().tags().keys() {
+                        o.add_string_choice(tag_list_name, tag_list_name);
+                    }
+
+                    o
+                });
+
                 command::populate_generate_options(
                     |opt| {
                         o.add_sub_option(opt);
@@ -35,13 +54,6 @@ pub async fn register(http: &Http, models: &[sd::Model]) -> anyhow::Result<()> {
                 );
 
                 o.create_sub_option(|o| {
-                    o.kind(CommandOptionType::String)
-                        .name(constant::value::TAGS_URL)
-                        .description(
-                            "The URL of tags to use (defaults to Danbooru safe if not specified)",
-                        )
-                })
-                .create_sub_option(|o| {
                     o.kind(CommandOptionType::Boolean)
                         .name(constant::value::HIDE_PROMPT)
                         .description("Whether or not to hide the prompt for generations")
@@ -97,8 +109,11 @@ async fn start(
         return Ok(());
     }
 
-    let url = util::get_value(&subcommand.options, constant::value::TAGS_URL)
-        .and_then(util::value_to_string);
+    cmd.create(&http, "Starting...").await?;
+
+    let tag_selection = util::get_value(&subcommand.options, constant::value::TAGS)
+        .and_then(util::value_to_string)
+        .context("no tag selection")?;
 
     let hide_prompt = util::get_value(&subcommand.options, constant::value::HIDE_PROMPT)
         .and_then(util::value_to_bool)
@@ -117,61 +132,44 @@ async fn start(
         value.as_ref().map(|s| s as &dyn Display)
     }
 
-    cmd.create_interaction_response(&http, |response| {
-        response
-            .kind(InteractionResponseType::ChannelMessageWithSource)
-            .interaction_response_data(|message| {
-                message.content(format!(
-                    "Starting with the following settings:\n{}",
-                    [
-                        (
-                            "Tags",
-                            if let Some(url) = url.as_ref() {
-                                Some(url as &dyn Display)
-                            } else {
-                                Some(&"Danbooru tags" as &dyn Display)
-                            },
-                        ),
-                        ("Negative prompt", display(&params.negative_prompt)),
-                        ("Seed", display(&params.seed)),
-                        ("Count", display(&params.batch_count)),
-                        ("Width", display(&params.width)),
-                        ("Height", display(&params.height)),
-                        ("Guidance scale", display(&params.cfg_scale)),
-                        ("Denoising strength", display(&params.denoising_strength)),
-                        ("Steps", display(&params.steps)),
-                        ("Tiling", display(&params.tiling)),
-                        ("Restore faces", display(&params.restore_faces)),
-                        ("Sampler", display(&params.sampler)),
-                        (
-                            "Model",
-                            display(&params.model.as_ref().map(|s| &s.name as &dyn Display))
-                        ),
-                    ]
-                    .into_iter()
-                    .filter_map(|(key, value)| Some((key, value?)))
-                    .map(|(key, value)| format!("- *{key}*: {value}"))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-                ))
-            })
-    })
+    cmd.edit(
+        &http,
+        &format!(
+            "Starting with the following settings:\n{}",
+            [
+                ("Tags", Some(&tag_selection as &dyn Display)),
+                ("Negative prompt", display(&params.negative_prompt)),
+                ("Seed", display(&params.seed)),
+                ("Count", display(&params.batch_count)),
+                ("Width", display(&params.width)),
+                ("Height", display(&params.height)),
+                ("Guidance scale", display(&params.cfg_scale)),
+                ("Denoising strength", display(&params.denoising_strength)),
+                ("Steps", display(&params.steps)),
+                ("Tiling", display(&params.tiling)),
+                ("Restore faces", display(&params.restore_faces)),
+                ("Sampler", display(&params.sampler)),
+                (
+                    "Model",
+                    display(&params.model.as_ref().map(|s| &s.name as &dyn Display))
+                ),
+            ]
+            .into_iter()
+            .filter_map(|(key, value)| Some((key, value?)))
+            .map(|(key, value)| format!("- *{key}*: {value}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+        ),
+    )
     .await?;
 
-    let tags = if let Some(url) = url {
-        reqwest::get(url)
-            .await?
-            .text()
-            .await?
-            .lines()
-            .map(|l| l.trim().to_string())
-            .collect()
-    } else {
-        Configuration::get()
-            .deepdanbooru_tag_whitelist()
-            .map(|w| w.iter().cloned().collect())
-            .unwrap_or_default()
-    };
+    let tags = Configuration::get()
+        .tags()
+        .get(&tag_selection)
+        .context("invalid tag selection")?
+        .iter()
+        .cloned()
+        .collect();
 
     sessions.lock().insert(
         cmd.channel_id,
