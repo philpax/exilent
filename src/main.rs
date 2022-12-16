@@ -44,7 +44,7 @@ async fn main() -> anyhow::Result<()> {
                 &authentication.sd_url,
                 sd_authentication
                     .as_ref()
-                    .map(|p| sd::Authentication::ApiAuth(&p.0, &p.1))
+                    .map(|p| sd::Authentication::ApiAuth(p.0, p.1))
                     .unwrap_or(sd::Authentication::None),
             )
             .await?,

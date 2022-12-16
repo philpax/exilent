@@ -1,7 +1,6 @@
 use crate::{
     cid,
     config::Configuration,
-    constant,
     store::{self, Store},
     util::{self, DiscordInteraction},
 };
@@ -137,32 +136,32 @@ pub async fn generation_task(
         );
         let store_key = store.insert_generation(generation)?;
 
-        use constant::emojis as E;
         let final_message = interaction
             .channel_id()
             .send_files(&http, [(bytes.as_slice(), filename.as_str())], |m| {
                 m.content(message).components(|c| {
+                    let e = &Configuration::get().emojis;
                     c.create_action_row(|r| {
                         r.create_button(|b| {
-                            b.emoji(E::RETRY.parse::<ReactionType>().unwrap())
+                            b.emoji(e.retry.parse::<ReactionType>().unwrap())
                                 .label("Retry")
                                 .style(component::ButtonStyle::Secondary)
                                 .custom_id(cid::Generation::Retry.to_id(store_key))
                         })
                         .create_button(|b| {
-                            b.emoji(E::RETRY_WITH_OPTIONS.parse::<ReactionType>().unwrap())
+                            b.emoji(e.retry_with_options.parse::<ReactionType>().unwrap())
                                 .label("Retry (options)")
                                 .style(component::ButtonStyle::Secondary)
                                 .custom_id(cid::Generation::RetryWithOptions.to_id(store_key))
                         })
                         .create_button(|b| {
-                            b.emoji(E::REMIX.parse::<ReactionType>().unwrap())
+                            b.emoji(e.remix.parse::<ReactionType>().unwrap())
                                 .label("Remix")
                                 .style(component::ButtonStyle::Secondary)
                                 .custom_id(cid::Generation::Remix.to_id(store_key))
                         })
                         .create_button(|b| {
-                            b.emoji(E::UPSCALE.parse::<ReactionType>().unwrap())
+                            b.emoji(e.upscale.parse::<ReactionType>().unwrap())
                                 .label("Upscale (ESRGAN 2x)")
                                 .style(component::ButtonStyle::Secondary)
                                 .custom_id(cid::Generation::Upscale.to_id(store_key))
@@ -170,14 +169,14 @@ pub async fn generation_task(
                     })
                     .create_action_row(|r| {
                         r.create_button(|b| {
-                            b.emoji(E::INTERROGATE_WITH_CLIP.parse::<ReactionType>().unwrap())
+                            b.emoji(e.interrogate_with_clip.parse::<ReactionType>().unwrap())
                                 .label("CLIP")
                                 .style(component::ButtonStyle::Secondary)
                                 .custom_id(cid::Generation::InterrogateClip.to_id(store_key))
                         })
                         .create_button(|b| {
                             b.emoji(
-                                E::INTERROGATE_WITH_DEEPDANBOORU
+                                e.interrogate_with_deepdanbooru
                                     .parse::<ReactionType>()
                                     .unwrap(),
                             )
@@ -261,24 +260,21 @@ pub async fn interrogate_task(
             ))
             .components(|c| {
                 c.create_action_row(|r| {
+                    let e = &Configuration::get().emojis;
                     r.create_button(|b| {
-                        b.emoji(
-                            constant::emojis::INTERROGATE_GENERATE
-                                .parse::<ReactionType>()
-                                .unwrap(),
-                        )
-                        .label(match interrogator {
-                            sd::Interrogator::Clip => "Generate",
-                            sd::Interrogator::DeepDanbooru => "Generate with shuffle",
-                        })
-                        .style(component::ButtonStyle::Secondary)
-                        .custom_id(cid::Interrogation::Generate.to_id(store_key))
+                        b.emoji(e.interrogate_generate.parse::<ReactionType>().unwrap())
+                            .label(match interrogator {
+                                sd::Interrogator::Clip => "Generate",
+                                sd::Interrogator::DeepDanbooru => "Generate with shuffle",
+                            })
+                            .style(component::ButtonStyle::Secondary)
+                            .custom_id(cid::Interrogation::Generate.to_id(store_key))
                     });
 
                     match interrogator {
                         sd::Interrogator::Clip => r.create_button(|b| {
                             b.emoji(
-                                constant::emojis::INTERROGATE_WITH_DEEPDANBOORU
+                                e.interrogate_with_deepdanbooru
                                     .parse::<ReactionType>()
                                     .unwrap(),
                             )
@@ -289,14 +285,12 @@ pub async fn interrogate_task(
                             )
                         }),
                         sd::Interrogator::DeepDanbooru => r.create_button(|b| {
-                            b.emoji(
-                                constant::emojis::INTERROGATE_WITH_CLIP
-                                    .parse::<ReactionType>()
-                                    .unwrap(),
-                            )
-                            .label("Re-interrogate with CLIP")
-                            .style(component::ButtonStyle::Secondary)
-                            .custom_id(cid::Interrogation::ReinterrogateWithClip.to_id(store_key))
+                            b.emoji(e.interrogate_with_clip.parse::<ReactionType>().unwrap())
+                                .label("Re-interrogate with CLIP")
+                                .style(component::ButtonStyle::Secondary)
+                                .custom_id(
+                                    cid::Interrogation::ReinterrogateWithClip.to_id(store_key),
+                                )
                         }),
                     }
                 })

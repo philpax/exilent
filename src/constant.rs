@@ -39,18 +39,6 @@ pub mod value {
     pub const MODEL_CHUNK_COUNT: usize = 25;
 }
 
-/// emojis
-pub mod emojis {
-    pub const RETRY: &str = "🔃";
-    pub const RETRY_WITH_OPTIONS: &str = "↪️";
-    pub const REMIX: &str = "🔀";
-    pub const UPSCALE: &str = "↔";
-    pub const INTERROGATE_WITH_CLIP: &str = "📋";
-    pub const INTERROGATE_WITH_DEEPDANBOORU: &str = "🧊";
-
-    pub const INTERROGATE_GENERATE: &str = "🎲";
-}
-
 /// resource
 pub mod resource {
     use std::path::{Path, PathBuf};

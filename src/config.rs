@@ -84,6 +84,30 @@ impl Default for Commands {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct Emojis {
+    pub retry: String,
+    pub retry_with_options: String,
+    pub remix: String,
+    pub upscale: String,
+    pub interrogate_with_clip: String,
+    pub interrogate_with_deepdanbooru: String,
+    pub interrogate_generate: String,
+}
+impl Default for Emojis {
+    fn default() -> Self {
+        Self {
+            retry: "🔃".to_string(),
+            retry_with_options: "↪️".to_string(),
+            remix: "🔀".to_string(),
+            upscale: "↔".to_string(),
+            interrogate_with_clip: "📋".to_string(),
+            interrogate_with_deepdanbooru: "🧊".to_string(),
+            interrogate_generate: "🎲".to_string(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Limits {
     pub count_min: usize,
     pub count_max: usize,
@@ -139,8 +163,10 @@ pub struct Configuration {
     pub authentication: Authentication,
     pub general: General,
     pub commands: Commands,
+    pub emojis: Emojis,
     pub limits: Limits,
     pub progress: Progress,
+
     #[serde(skip)]
     runtime: ConfigurationRuntime,
 }
