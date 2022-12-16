@@ -1,4 +1,4 @@
-use crate::{sd, util};
+use crate::{config::Configuration, sd, util};
 use anyhow::Context;
 use itertools::Itertools;
 use parking_lot::Mutex;
@@ -240,12 +240,13 @@ pub struct Generation {
 impl Generation {
     pub fn as_message(&self, models: &[sd::Model]) -> String {
         use crate::constant as c;
+        let commands = &Configuration::get().commands;
         format!(
             "`/{} {}:{}{} {}:{} {}:{} {}:{} {}:{} {}:{} {}:{} {}:{} {}:{} {}:{}{}{}`",
             if self.image_generation.is_some() {
-                c::command::PAINTOVER
+                &commands.paintover
             } else {
-                c::command::PAINT
+                &commands.paint
             },
             c::value::PROMPT,
             self.prompt,
@@ -273,7 +274,7 @@ impl Generation {
             self.denoising_strength,
             util::find_model_by_hash(models, &self.model_hash)
                 .map(|(idx, m)| {
-                    let model_category = idx / c::misc::MODEL_CHUNK_COUNT;
+                    let model_category = idx / c::value::MODEL_CHUNK_COUNT;
                     format!(
                         " {}{}:{}",
                         c::value::MODEL,

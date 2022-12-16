@@ -1,7 +1,13 @@
 use anyhow::Context;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, path::PathBuf};
+use std::{
+    collections::{HashMap, HashSet},
+    io::BufRead,
+    path::{Path, PathBuf},
+};
+
+use crate::constant;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct General {
@@ -9,11 +15,10 @@ pub struct General {
     pub automatically_prepend_keyword: bool,
     pub hide_models: HashSet<String>,
 }
-
 impl Default for General {
     fn default() -> Self {
         Self {
-            deepdanbooru_tag_whitelist: Some(PathBuf::from("assets/tags/danbooru_sanitized.txt")),
+            deepdanbooru_tag_whitelist: Some(constant::resource::danbooru_sanitized_path()),
             automatically_prepend_keyword: true,
             hide_models: HashSet::new(),
         }
@@ -31,7 +36,20 @@ pub struct Commands {
     pub png_info: String,
     pub wirehead: String,
 }
-
+impl Commands {
+    pub fn all(&self) -> HashSet<&str> {
+        HashSet::from_iter([
+            self.paint.as_str(),
+            self.paintover.as_str(),
+            self.paintagain.as_str(),
+            self.postprocess.as_str(),
+            self.interrogate.as_str(),
+            self.exilent.as_str(),
+            self.png_info.as_str(),
+            self.wirehead.as_str(),
+        ])
+    }
+}
 impl Default for Commands {
     fn default() -> Self {
         Self {
@@ -64,7 +82,6 @@ pub struct Limits {
     pub steps_min: usize,
     pub steps_max: usize,
 }
-
 impl Default for Limits {
     fn default() -> Self {
         Self {
@@ -90,7 +107,6 @@ pub struct Progress {
     /// time in milliseonds to wait between progress updates
     pub update_ms: u64,
 }
-
 impl Default for Progress {
     fn default() -> Self {
         Self {
@@ -106,6 +122,8 @@ pub struct Configuration {
     pub commands: Commands,
     pub limits: Limits,
     pub progress: Progress,
+    #[serde(skip)]
+    runtime: ConfigurationRuntime,
 }
 impl Configuration {
     const FILENAME: &str = "config.toml";
@@ -117,14 +135,51 @@ impl Configuration {
             .context("config already set")
     }
 
+    pub fn get() -> &'static Self {
+        CONFIGURATION.wait()
+    }
+
+    pub fn deepdanbooru_tag_whitelist(&self) -> Option<&Tags> {
+        self.runtime.deepdanbooru_tag_whitelist.as_ref()
+    }
+
+    pub fn tags(&self) -> &HashMap<String, Tags> {
+        &self.runtime.tags
+    }
+
     fn load() -> anyhow::Result<Self> {
-        if let Ok(file) = std::fs::read_to_string(Self::FILENAME) {
-            Ok(toml::from_str(&file)?)
+        let mut config = if let Ok(file) = std::fs::read_to_string(Self::FILENAME) {
+            toml::from_str(&file)?
         } else {
             let config = Self::default();
             config.save()?;
-            Ok(config)
-        }
+            config
+        };
+
+        config.runtime = ConfigurationRuntime {
+            deepdanbooru_tag_whitelist: config
+                .general
+                .deepdanbooru_tag_whitelist
+                .as_deref()
+                .map(read_tags_from_file)
+                .transpose()?,
+            tags: std::fs::read_dir(constant::resource::tags_dir())?
+                .filter_map(|r| r.ok())
+                .filter(|r| r.path().extension().unwrap_or_default() == "txt")
+                .map(|de| {
+                    anyhow::Ok((
+                        de.path()
+                            .file_stem()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .to_string(),
+                        read_tags_from_file(&de.path())?,
+                    ))
+                })
+                .collect::<Result<HashMap<_, _>, _>>()?,
+        };
+
+        Ok(config)
     }
 
     fn save(&self) -> anyhow::Result<()> {
@@ -134,4 +189,20 @@ impl Configuration {
         )?)
     }
 }
-pub static CONFIGURATION: OnceCell<Configuration> = OnceCell::new();
+static CONFIGURATION: OnceCell<Configuration> = OnceCell::new();
+
+pub type Tags = HashSet<String>;
+
+#[derive(Debug, Default)]
+struct ConfigurationRuntime {
+    pub deepdanbooru_tag_whitelist: Option<Tags>,
+    pub tags: HashMap<String, Tags>,
+}
+
+fn read_tags_from_file(path: &Path) -> anyhow::Result<Tags> {
+    Ok(std::io::BufReader::new(std::fs::File::open(path)?)
+        .lines()
+        .filter_map(|l| l.ok())
+        .filter(|l| !l.starts_with("//"))
+        .collect())
+}

@@ -1,5 +1,7 @@
 use crate::{
-    cid, constant,
+    cid,
+    config::Configuration,
+    constant,
     store::{self, Store},
     util::{self, DiscordInteraction},
 };
@@ -21,8 +23,6 @@ pub async fn generation_task(
     (prompt, negative_prompt): (&str, Option<&str>),
     image_generation: Option<store::ImageGeneration>,
 ) -> anyhow::Result<()> {
-    use constant::misc::{PROGRESS_SCALE_FACTOR, PROGRESS_UPDATE_MS};
-
     // generate and update progress
     loop {
         let progress = task.progress().await?;
@@ -31,8 +31,8 @@ pub async fn generation_task(
             .as_ref()
             .map(|i| {
                 util::encode_image_to_png_bytes(i.resize(
-                    i.width() / PROGRESS_SCALE_FACTOR,
-                    i.height() / PROGRESS_SCALE_FACTOR,
+                    ((i.width() as f32) * Configuration::get().progress.scale_factor) as u32,
+                    ((i.height() as f32) * Configuration::get().progress.scale_factor) as u32,
                     image::imageops::FilterType::Nearest,
                 ))
             })
@@ -70,7 +70,10 @@ pub async fn generation_task(
         if progress.is_finished() {
             break;
         }
-        tokio::time::sleep(Duration::from_millis(PROGRESS_UPDATE_MS)).await;
+        tokio::time::sleep(Duration::from_millis(
+            Configuration::get().progress.update_ms,
+        ))
+        .await;
     }
 
     // retrieve result
@@ -223,16 +226,16 @@ pub async fn interrogate_task(
     ),
 ) -> anyhow::Result<()> {
     let result = client.interrogate(&image, interrogator).await?;
-    let result = if matches!(interrogator, sd::Interrogator::DeepDanbooru)
-        && constant::config::USE_SAFE_TAGS
-    {
-        result
+    let result = match (
+        interrogator,
+        Configuration::get().deepdanbooru_tag_whitelist(),
+    ) {
+        (sd::Interrogator::DeepDanbooru, Some(tags)) => result
             .split(", ")
-            .filter(|s| constant::resource::DANBOORU_TAGS.contains(s))
+            .filter(|s| tags.contains(*s))
             .collect::<Vec<_>>()
-            .join(", ")
-    } else {
-        result
+            .join(", "),
+        _ => result,
     };
 
     let store_key = store.insert_interrogation(store::Interrogation {

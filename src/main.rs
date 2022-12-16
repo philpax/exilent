@@ -57,7 +57,9 @@ async fn main() -> anyhow::Result<()> {
         .await?
         .into_iter()
         .filter(|m| {
-            !constant::config::HIDE_MODELS
+            !Configuration::get()
+                .general
+                .hide_models
                 .contains(util::extract_last_bracketed_string(&m.title).unwrap())
         })
         .collect();
@@ -99,17 +101,19 @@ impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
 
-        let registered_commands: HashSet<String> =
-            Command::get_global_application_commands(&ctx.http)
-                .await
-                .unwrap()
-                .iter()
-                .map(|c| c.name.clone())
-                .collect();
-
-        let our_commands: HashSet<String> = constant::command::COMMANDS
+        let registered_commands = Command::get_global_application_commands(&ctx.http)
+            .await
+            .unwrap();
+        let registered_commands: HashSet<_> = registered_commands
             .iter()
-            .map(|s| s.to_string())
+            .map(|c| c.name.as_str())
+            .collect();
+
+        let our_commands: HashSet<_> = Configuration::get()
+            .commands
+            .all()
+            .iter()
+            .cloned()
             .collect();
 
         if registered_commands != our_commands {
@@ -136,55 +140,38 @@ impl EventHandler for Handler {
         let result = match interaction {
             Interaction::ApplicationCommand(cmd) => {
                 channel_id = Some(cmd.channel_id);
-                match cmd.data.name.as_str() {
-                    constant::command::PAINT => {
-                        exilent::command::paint(&self.client, &self.models, &self.store, http, cmd)
-                            .await
-                    }
-                    constant::command::PAINTOVER => {
-                        exilent::command::paintover(
-                            &self.client,
-                            &self.models,
-                            &self.store,
-                            http,
-                            cmd,
-                        )
+                let name = cmd.data.name.as_str();
+                let commands = &Configuration::get().commands;
+
+                if name == commands.paint {
+                    exilent::command::paint(&self.client, &self.models, &self.store, http, cmd)
                         .await
-                    }
-                    constant::command::PAINTAGAIN => {
-                        exilent::command::paintagain(&self.store, http, cmd).await
-                    }
-                    constant::command::POSTPROCESS => {
-                        exilent::command::postprocess(&self.client, http, cmd).await
-                    }
-                    constant::command::INTERROGATE => {
-                        exilent::command::interrogate(&self.client, &self.store, http, cmd).await
-                    }
-                    constant::command::EXILENT => {
-                        exilent::command::exilent(
-                            &self.client,
-                            &self.models,
-                            &self.store,
-                            http,
-                            cmd,
-                        )
+                } else if name == commands.paintover {
+                    exilent::command::paintover(&self.client, &self.models, &self.store, http, cmd)
                         .await
-                    }
-                    constant::command::PNG_INFO => {
-                        exilent::command::png_info(&self.client, http, cmd).await
-                    }
-                    constant::command::WIREHEAD => {
-                        wirehead::command::wirehead(
-                            ctx.http.clone(),
-                            cmd,
-                            &self.sessions,
-                            self.client.clone(),
-                            &self.models,
-                            &self.store,
-                        )
+                } else if name == commands.paintagain {
+                    exilent::command::paintagain(&self.store, http, cmd).await
+                } else if name == commands.postprocess {
+                    exilent::command::postprocess(&self.client, http, cmd).await
+                } else if name == commands.interrogate {
+                    exilent::command::interrogate(&self.client, &self.store, http, cmd).await
+                } else if name == commands.exilent {
+                    exilent::command::exilent(&self.client, &self.models, &self.store, http, cmd)
                         .await
-                    }
-                    _ => Ok(()),
+                } else if name == commands.png_info {
+                    exilent::command::png_info(&self.client, http, cmd).await
+                } else if name == commands.wirehead {
+                    wirehead::command::wirehead(
+                        ctx.http.clone(),
+                        cmd,
+                        &self.sessions,
+                        self.client.clone(),
+                        &self.models,
+                        &self.store,
+                    )
+                    .await
+                } else {
+                    Ok(())
                 }
             }
             Interaction::MessageComponent(mci) => {

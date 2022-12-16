@@ -1,4 +1,4 @@
-use crate::{command, constant, store, util};
+use crate::{command, config::Configuration, constant, store, util};
 
 use super::Session;
 use parking_lot::Mutex;
@@ -19,7 +19,7 @@ use std::{collections::HashMap, fmt::Display, sync::Arc};
 pub async fn register(http: &Http, models: &[sd::Model]) -> anyhow::Result<()> {
     Command::create_global_application_command(http, |command| {
         command
-            .name(constant::command::WIREHEAD)
+            .name(&Configuration::get().commands.wirehead)
             .description("Interact with Wirehead")
             .create_option(|o| {
                 o.kind(CommandOptionType::SubCommand)
@@ -167,10 +167,10 @@ async fn start(
             .map(|l| l.trim().to_string())
             .collect()
     } else {
-        constant::resource::DANBOORU_TAGS
-            .iter()
-            .map(|s| s.to_string())
-            .collect()
+        Configuration::get()
+            .deepdanbooru_tag_whitelist()
+            .map(|w| w.iter().cloned().collect())
+            .unwrap_or_default()
     };
 
     sessions.lock().insert(
