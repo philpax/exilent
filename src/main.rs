@@ -1,11 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    env,
-    sync::Arc,
-};
-
 use anyhow::Context as AnyhowContext;
-use dotenv::dotenv;
 use parking_lot::Mutex;
 use serenity::{
     async_trait,
@@ -17,6 +10,10 @@ use serenity::{
     Client,
 };
 use stable_diffusion_a1111_webui_client as sd;
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 mod command;
 mod config;
@@ -33,17 +30,18 @@ use store::Store;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    dotenv().ok();
-
     constant::resource::write_assets()?;
     Configuration::init()?;
 
+    let authentication = &Configuration::get().authentication;
     let client = {
-        let sd_url = env::var("SD_URL").context("SD_URL not specified")?;
-        let sd_authentication = env::var("SD_USER").ok().zip(env::var("SD_PASS").ok());
+        let sd_authentication = Option::zip(
+            authentication.sd_api_username.as_deref(),
+            authentication.sd_api_password.as_deref(),
+        );
         Arc::new(
             sd::Client::new(
-                &sd_url,
+                &authentication.sd_url,
                 sd_authentication
                     .as_ref()
                     .map(|p| sd::Authentication::ApiAuth(&p.0, &p.1))
@@ -67,7 +65,10 @@ async fn main() -> anyhow::Result<()> {
 
     // Build our client.
     let mut client = Client::builder(
-        env::var("DISCORD_TOKEN").context("Expected a token in the environment")?,
+        authentication
+            .discord_token
+            .as_deref()
+            .context("Expected authentication.discord_token to be filled in config")?,
         GatewayIntents::default(),
     )
     .event_handler(Handler {

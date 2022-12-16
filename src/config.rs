@@ -10,6 +10,24 @@ use std::{
 use crate::constant;
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct Authentication {
+    pub discord_token: Option<String>,
+    pub sd_url: String,
+    pub sd_api_username: Option<String>,
+    pub sd_api_password: Option<String>,
+}
+impl Default for Authentication {
+    fn default() -> Self {
+        Self {
+            discord_token: None,
+            sd_url: "http://localhost:7860".to_string(),
+            sd_api_username: None,
+            sd_api_password: None,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct General {
     pub deepdanbooru_tag_whitelist: Option<PathBuf>,
     pub automatically_prepend_keyword: bool,
@@ -118,6 +136,7 @@ impl Default for Progress {
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Configuration {
+    pub authentication: Authentication,
     pub general: General,
     pub commands: Commands,
     pub limits: Limits,
