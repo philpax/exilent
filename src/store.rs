@@ -62,6 +62,32 @@ impl Store {
         ",
             (),
         )?;
+        connection.execute(
+            r"
+            CREATE TABLE IF NOT EXISTS preset (
+                id	            INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id	        TEXT NOT NULL,
+                name                TEXT NOT NULL,
+
+                prefix_prompt	    TEXT,
+                suffix_prompt,      TEXT,
+                negative_prompt	    TEXT,
+                width	            INTEGER,
+                height	            INTEGER,
+                cfg_scale	        REAL,
+                steps	            INTEGER,
+                tiling	            INTEGER,
+                restore_faces	    INTEGER,
+                sampler	            TEXT,
+                model_hash	        TEXT,
+                denoising_strength  REAL,
+
+                -- img2img specific fields
+                resize_mode         TEXT,
+            ) STRICT;
+        ",
+            (),
+        )?;
 
         Ok(Self(Mutex::new(connection)))
     }
@@ -179,6 +205,83 @@ impl Store {
             result,
             interrogator,
         )?))
+    }
+
+    pub fn insert_preset(&self, preset: Preset) -> anyhow::Result<i64> {
+        let p = preset;
+        let db = &mut *self.0.lock();
+        db.execute(
+            r"
+            INSERT INTO preset
+                (user_id, name, prefix_prompt, suffix_prompt, negative_prompt, width, height,
+                 cfg_scale, steps, tiling, restore_faces, sampler, model_hash,
+                 denoising_strength, resize_mode)
+            VALUES
+                    (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ",
+            rusqlite::params![
+                p.user_id.as_u64().to_string(),
+                p.name,
+                p.prefix_prompt,
+                p.suffix_prompt,
+                p.negative_prompt,
+                p.width,
+                p.height,
+                p.cfg_scale,
+                p.steps,
+                p.tiling,
+                p.restore_faces,
+                p.sampler.map(|s| s.to_string()),
+                p.model_hash,
+                p.denoising_strength,
+                p.resize_mode.map(|s| s.to_string())
+            ],
+        )?;
+
+        Ok(db.last_insert_rowid())
+    }
+
+    pub fn get_preset(&self, user_id: UserId, name: String) -> anyhow::Result<Option<Preset>> {
+        let db = &mut *self.0.lock();
+        let Some((
+            id, prefix_prompt, suffix_prompt, negative_prompt, width, height,
+                 cfg_scale, steps, tiling, restore_faces, sampler, model_hash,
+                 denoising_strength, resize_mode
+        )): Option<(Option<i64>, Option<String>, Option<String>, Option<String>, Option<u32>, Option<u32>, Option<f32>, Option<u32>, Option<bool>, Option<bool>, Option<String>, Option<String>, Option<f32>, Option<String>)> = db.query_row(
+            r"
+            SELECT
+                id, prefix_prompt, suffix_prompt, negative_prompt, width, height,
+            cfg_scale, steps, tiling, restore_faces, sampler, model_hash,
+            denoising_strength, resize_mode
+            FROM
+                preset
+            WHERE
+                user_id = ? AND name = ?
+            ",
+            (user_id.as_u64().to_string(), name.clone()),
+            |r| r.try_into(),
+        )
+        .optional()? else { return Ok(None); };
+        let sampler = sampler.and_then(|s| sd::Sampler::try_from(s.as_str()).ok());
+        let resize_mode = resize_mode.and_then(|s| sd::ResizeMode::try_from(s.as_str()).ok());
+        Ok(Some(Preset {
+            id,
+            user_id,
+            name,
+            prefix_prompt,
+            suffix_prompt,
+            negative_prompt,
+            width,
+            height,
+            cfg_scale,
+            steps,
+            tiling,
+            restore_faces,
+            sampler,
+            model_hash,
+            denoising_strength,
+            resize_mode,
+        }))
     }
 
     pub fn get_model_usage_counts(&self) -> anyhow::Result<HashMap<UserId, Vec<(String, u64)>>> {
@@ -411,6 +514,76 @@ impl Interrogation {
             interrogator,
         })
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct Preset {
+    pub id: Option<i64>,
+    pub user_id: UserId,
+    pub name: String,
+
+    pub prefix_prompt: Option<String>,
+    pub suffix_prompt: Option<String>,
+    pub negative_prompt: Option<String>,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub cfg_scale: Option<f32>,
+    pub steps: Option<u32>,
+    pub tiling: Option<bool>,
+    pub restore_faces: Option<bool>,
+    pub sampler: Option<Sampler>,
+    pub model_hash: Option<String>,
+    pub denoising_strength: Option<f32>,
+    pub resize_mode: Option<sd::ResizeMode>,
+}
+impl Preset {
+    // pub fn as_message(&self, models: &[sd::Model]) -> String {
+    //     use crate::constant as c;
+    //     format!(
+    //         "`/{} {}:{:?}{:?}{} {}:{:?} {}:{:?} {}:{:?} {}:{:?} {}:{:?} {}:{:?} {}:{:?} {}:{:?} {}:{:?}`",
+    //         c::command::PRESET,
+    //         c::value::PROMPT,
+    //         self.prefix_prompt,
+    //         self.suffix_prompt,
+    //         self.negative_prompt
+    //             .as_ref()
+    //             .map(|s| format!(" {}:{s}", c::value::NEGATIVE_PROMPT))
+    //             .unwrap_or_default(),
+    //         c::value::WIDTH,
+    //         self.width,
+    //         c::value::HEIGHT,
+    //         self.height,
+    //         c::value::GUIDANCE_SCALE,
+    //         self.cfg_scale,
+    //         c::value::STEPS,
+    //         self.steps,
+    //         c::value::TILING,
+    //         self.tiling,
+    //         c::value::RESTORE_FACES,
+    //         self.restore_faces,
+    //         c::value::SAMPLER,
+    //         self.sampler,
+    //         c::value::DENOISING_STRENGTH,
+    //         self.denoising_strength,
+    //         util::find_model_by_hash(models, &self.model_hash)
+    //             .map(|(idx, m)| {
+    //                 let model_category = idx / c::misc::MODEL_CHUNK_COUNT;
+    //                 format!(
+    //                     " {}{}:{}",
+    //                     c::value::MODEL,
+    //                     if model_category == 0 {
+    //                         String::new()
+    //                     } else {
+    //                         (model_category + 1).to_string()
+    //                     },
+    //                     m.name
+    //                 )
+    //             })
+    //             .unwrap_or_default(),
+    //         c::value::RESIZE_MODE,
+    //         self.resize_mode
+    //     )
+    // }
 }
 
 impl Store {

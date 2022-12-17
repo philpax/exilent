@@ -22,6 +22,7 @@ pub mod command {
     pub const EXILENT: &str = "exilent";
     pub const PNG_INFO: &str = "pnginfo";
     pub const WIREHEAD: &str = "wirehead";
+    pub const PRESET: &str = "preset";
 
     pub const COMMANDS: &[&str] = &[
         PAINT,
