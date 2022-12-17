@@ -13,14 +13,6 @@ Many thanks to [aiyabot](https://github.com/Kilvoctu/aiyabot), which paved the w
   - Hit `Reset Token`, and copy the token it gives you somewhere.
 - Go to `OAuth2 > URL Generator`, select `bot`, then select `Send Messages` and `Use Slash Commands`.
   - Go to the URL it generates, and then invite it to a server of your choice.
-- In the exilent folder, create an `.env` folder with the following contents:
-
-```dotenv
-DISCORD_TOKEN = TOKEN_FROM_BEFORE
-SD_URL = URL_OF_YOUR_WEBUI_INSTANCE
-# optional (--api-auth):
-SD_USER = USERNAME_FOR_API
-SD_PASS = PASSWORD_FOR_API
-```
-
-- Run `cargo run` to start Exilent.
+- Run `cargo run` to start Exilent. This will auto-generate a configuration file, and then quit.
+- Fill in the configuration file with the required details.
+- You can then run Exilent to your heart's content.

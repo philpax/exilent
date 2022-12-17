@@ -1,4 +1,4 @@
-use crate::{constant, store::Store, util};
+use crate::{config::Configuration, constant, store::Store, util};
 use serenity::{
     builder::CreateApplicationCommandOption,
     model::prelude::{
@@ -12,6 +12,8 @@ pub fn populate_generate_options(
     models: &[sd::Model],
     with_prompt: bool,
 ) {
+    let limits = &Configuration::get().limits;
+
     if with_prompt {
         add_option({
             let mut opt = CreateApplicationCommandOption::default();
@@ -43,8 +45,8 @@ pub fn populate_generate_options(
         opt.name(constant::value::COUNT)
             .description("The number of images to generate")
             .kind(CommandOptionType::Integer)
-            .min_int_value(constant::limits::COUNT_MIN)
-            .max_int_value(constant::limits::COUNT_MAX)
+            .min_int_value(limits.count_min)
+            .max_int_value(limits.count_max)
             .required(false);
         opt
     });
@@ -53,8 +55,8 @@ pub fn populate_generate_options(
         opt.name(constant::value::WIDTH)
             .description("The width of the image")
             .kind(CommandOptionType::Integer)
-            .min_int_value(constant::limits::WIDTH_MIN)
-            .max_int_value(constant::limits::WIDTH_MAX)
+            .min_int_value(limits.width_min)
+            .max_int_value(limits.width_max)
             .required(false);
         opt
     });
@@ -63,8 +65,8 @@ pub fn populate_generate_options(
         opt.name(constant::value::HEIGHT)
             .description("The height of the image")
             .kind(CommandOptionType::Integer)
-            .min_int_value(constant::limits::HEIGHT_MIN)
-            .max_int_value(constant::limits::HEIGHT_MAX)
+            .min_int_value(limits.height_min)
+            .max_int_value(limits.height_max)
             .required(false);
         opt
     });
@@ -73,8 +75,8 @@ pub fn populate_generate_options(
         opt.name(constant::value::GUIDANCE_SCALE)
             .description("The scale of the guidance to apply")
             .kind(CommandOptionType::Number)
-            .min_number_value(constant::limits::GUIDANCE_SCALE_MIN)
-            .max_number_value(constant::limits::GUIDANCE_SCALE_MAX)
+            .min_number_value(limits.guidance_scale_min)
+            .max_number_value(limits.guidance_scale_max)
             .required(false);
         opt
     });
@@ -83,8 +85,8 @@ pub fn populate_generate_options(
         opt.name(constant::value::STEPS)
             .description("The number of denoising steps to apply")
             .kind(CommandOptionType::Integer)
-            .min_int_value(constant::limits::STEPS_MIN)
-            .max_int_value(constant::limits::STEPS_MAX)
+            .min_int_value(limits.steps_min)
+            .max_int_value(limits.steps_max)
             .required(false);
         opt
     });
@@ -128,7 +130,10 @@ pub fn populate_generate_options(
         opt
     });
 
-    for (idx, chunk) in models.chunks(constant::misc::MODEL_CHUNK_COUNT).enumerate() {
+    for (idx, chunk) in models
+        .chunks(constant::value::MODEL_CHUNK_COUNT)
+        .enumerate()
+    {
         add_option({
             let mut opt = CreateApplicationCommandOption::default();
 

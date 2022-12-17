@@ -1,65 +1,3 @@
-/// config
-pub mod config {
-    use once_cell::sync::Lazy;
-    use std::collections::HashSet;
-
-    /// If set, Exilent will remove any tags in DeepDanbooru results that aren't
-    /// present in safe_tags.txt.
-    pub const USE_SAFE_TAGS: bool = true;
-
-    /// If set, Exilent will automatically look for a keyword in the square brackets
-    /// of a model name and prepend it to the prompt if it is not already present.
-    ///
-    /// Inkpunk v2 [nvinkpunk] will add `nvinkpunk` to the start of a prompt.
-    /// This does not work if there is more than one keyword.
-    pub const AUTOMATICALLY_PREPEND_KEYWORD: bool = true;
-
-    /// If you have too many models, Discord will refuse to register commands as
-    /// the combined length is too long. You can use this to blacklist models
-    /// that you don't care about having Discord access to.
-    pub static HIDE_MODELS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
-        HashSet::from_iter([
-            "916ea38c", // All-In-One Pixel
-            "be7ddafc", // Classic Animation
-            "8b3c8f11", // Comic
-            "dcdf0425", // Cyberpunk Anime
-            "a48a2a1b", // Ghibli
-            "9ef9f138", // Gigafractal v1
-            "94674f07", // Inkpunk v1
-            "ddc6edf2", // Openjourney
-            "aa212ec6", // PixelArt Spritesheet
-            "74f4c61c", // Redshift
-            "41fef4bd", // Robo v1
-            "7460a6fa", // Stable v1.4
-            "3e16efc8", // Stable v1.5 inpainting
-            "50444ca2", // Tron Legacy
-        ])
-    });
-}
-
-/// discord command names
-pub mod command {
-    pub const PAINT: &str = "paint";
-    pub const PAINTOVER: &str = "paintover";
-    pub const PAINTAGAIN: &str = "paintagain";
-    pub const POSTPROCESS: &str = "postprocess";
-    pub const INTERROGATE: &str = "interrogate";
-    pub const EXILENT: &str = "exilent";
-    pub const PNG_INFO: &str = "pnginfo";
-    pub const WIREHEAD: &str = "wirehead";
-
-    pub const COMMANDS: &[&str] = &[
-        PAINT,
-        PAINTOVER,
-        PAINTAGAIN,
-        POSTPROCESS,
-        INTERROGATE,
-        EXILENT,
-        PNG_INFO,
-        WIREHEAD,
-    ];
-}
-
 /// names of values used in interactions
 pub mod value {
     pub const PROMPT: &str = "prompt";
@@ -94,65 +32,60 @@ pub mod value {
     pub const IMAGE_ATTACHMENT: &str = "image_attachment";
     pub const INTERROGATOR: &str = "interrogator";
 
-    pub const TAGS_URL: &str = "tags_url";
+    pub const TAGS: &str = "tags";
     pub const HIDE_PROMPT: &str = "hide_prompt";
-}
 
-/// emojis
-pub mod emojis {
-    pub const RETRY: &str = "🔃";
-    pub const RETRY_WITH_OPTIONS: &str = "↪️";
-    pub const REMIX: &str = "🔀";
-    pub const UPSCALE: &str = "↔";
-    pub const INTERROGATE_WITH_CLIP: &str = "📋";
-    pub const INTERROGATE_WITH_DEEPDANBOORU: &str = "🧊";
-
-    pub const INTERROGATE_GENERATE: &str = "🎲";
-}
-
-/// limits
-pub mod limits {
-    pub const COUNT_MIN: usize = 1;
-    pub const COUNT_MAX: usize = 4;
-
-    pub const WIDTH_MIN: u32 = 64;
-    pub const WIDTH_MAX: u32 = 1024;
-
-    pub const HEIGHT_MIN: u32 = 64;
-    pub const HEIGHT_MAX: u32 = 1024;
-
-    pub const GUIDANCE_SCALE_MIN: f64 = 2.5;
-    pub const GUIDANCE_SCALE_MAX: f64 = 20.0;
-
-    pub const STEPS_MIN: usize = 5;
-    pub const STEPS_MAX: usize = 100;
-}
-
-/// misc
-pub mod misc {
-    /// the factor to scale progress images by to reduce upload size
-    pub const PROGRESS_SCALE_FACTOR: u32 = 2;
-
-    /// time in milliseonds to wait between progress updates
-    pub const PROGRESS_UPDATE_MS: u64 = 250;
-
-    /// number of models per category
+    /// Discord allows for a maximum of 25 options in a choice
     pub const MODEL_CHUNK_COUNT: usize = 25;
 }
 
 /// resource
 pub mod resource {
-    use once_cell::sync::Lazy;
-    use std::collections::HashSet;
+    use std::path::{Path, PathBuf};
 
-    /// Danbooru tags
-    pub static DANBOORU_TAGS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
-        include_str!("../resource/tags.txt")
-            .lines()
-            .map(|l| l.trim())
-            .collect()
-    });
+    pub fn assets_dir() -> PathBuf {
+        PathBuf::from("assets")
+    }
 
-    /// Image to show when generation fails
-    pub const GENERATION_FAILED_IMAGE: &[u8] = include_bytes!("../resource/generation-failed.png");
+    pub fn generation_failed_path() -> PathBuf {
+        assets_dir().join("generation_failed.png")
+    }
+
+    pub fn tags_dir() -> PathBuf {
+        assets_dir().join("tags")
+    }
+
+    pub fn danbooru_sanitized_path() -> PathBuf {
+        tags_dir().join("danbooru_sanitized.txt")
+    }
+
+    pub fn write_assets() -> anyhow::Result<()> {
+        fn write_file<C: AsRef<[u8]>>(path: impl AsRef<Path>, contents: C) -> anyhow::Result<()> {
+            let path = path.as_ref();
+            if !path.exists() {
+                std::fs::write(path, contents)?;
+            }
+            Ok(())
+        }
+
+        let assets_dir = assets_dir();
+        std::fs::create_dir_all(assets_dir)?;
+        write_file(
+            generation_failed_path(),
+            include_bytes!("../resource/generation_failed.png"),
+        )?;
+
+        let tags_dir = tags_dir();
+        std::fs::create_dir_all(&tags_dir)?;
+        write_file(
+            tags_dir.join("cadaeic_tags.txt"),
+            include_str!("../resource/tags/cadaeic_tags.txt"),
+        )?;
+        write_file(
+            danbooru_sanitized_path(),
+            include_str!("../resource/tags/danbooru_sanitized.txt"),
+        )?;
+
+        Ok(())
+    }
 }

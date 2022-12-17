@@ -16,6 +16,7 @@ use serenity::{
 use stable_diffusion_a1111_webui_client as sd;
 use std::collections::HashMap;
 
+#[allow(clippy::too_many_arguments)]
 pub async fn to_exilent(
     sessions: &Mutex<HashMap<ChannelId, Session>>,
     client: &sd::Client,

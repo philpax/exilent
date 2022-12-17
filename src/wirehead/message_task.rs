@@ -137,7 +137,7 @@ async fn generate(
         Err(err) => {
             println!("generation failed: {:?}", err);
             (
-                image::load_from_memory(constant::resource::GENERATION_FAILED_IMAGE)?,
+                image::open(constant::resource::generation_failed_path())?,
                 0,
             )
         }

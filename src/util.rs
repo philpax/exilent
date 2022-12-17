@@ -18,7 +18,7 @@ use serenity::{
     },
 };
 
-use crate::{constant, sd};
+use crate::{config::Configuration, constant, sd};
 
 pub fn get_value<'a>(
     options: &'a [CommandDataOption],
@@ -144,7 +144,7 @@ fn extract_keywords(model_name: &str) -> Vec<&str> {
 }
 
 fn prepend_keyword_if_necessary(prompt: &str, model_name: &str) -> String {
-    if !constant::config::AUTOMATICALLY_PREPEND_KEYWORD {
+    if !Configuration::get().general.automatically_prepend_keyword {
         return prompt.to_string();
     }
 
@@ -165,20 +165,24 @@ fn prepend_keyword_if_necessary_unchecked(prompt: &str, model_name: &str) -> Str
 }
 
 fn fixup_resolution(width: u32, height: u32) -> (u32, u32) {
-    use constant::limits::{HEIGHT_MAX, WIDTH_MAX};
+    let crate::config::Limits {
+        width_max,
+        height_max,
+        ..
+    } = Configuration::get().limits;
 
     let mut width = width;
     let mut height = height;
     const ROUND_PRECISION: u32 = 64;
 
-    if width > WIDTH_MAX {
-        let scale_factor = (width as f32) / (WIDTH_MAX as f32);
+    if width > width_max {
+        let scale_factor = (width as f32) / (width_max as f32);
         width = ((width as f32) / scale_factor) as u32;
         height = ((height as f32) / scale_factor) as u32;
     }
 
-    if height > HEIGHT_MAX {
-        let scale_factor = (height as f32) / (HEIGHT_MAX as f32);
+    if height > height_max {
+        let scale_factor = (height as f32) / (height_max as f32);
         width = ((width as f32) / scale_factor) as u32;
         height = ((height as f32) / scale_factor) as u32;
     }

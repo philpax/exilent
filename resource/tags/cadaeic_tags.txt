@@ -1,0 +1,1501 @@
+// List of keywords extracted from cadaeic's prompt generator:
+// https://perchance.org/image-synthesis-prompt-generator
+beggar
+busker
+farmer
+villager
+king
+queen
+noble
+leader
+boss
+president
+mayor
+minister
+prince
+princess
+heir
+hero
+heroine
+revolutionary
+protagonist
+captain
+admiral
+general
+lieutenant
+officer
+sheriff
+soldier
+warrior
+knight
+guard
+paladin
+fighter
+sellsword
+mercenary
+adventurer
+assassin
+thief
+rogue
+mage
+magician
+wizard
+witch
+warlock
+sorceror
+bard
+ranger
+archer
+singer
+cleric
+healer
+chirurgeon
+alchemist
+physician
+pirate
+privateer
+bandit
+outlaw
+cowboy
+engineer
+scientist
+researcher
+scholar
+explorer
+pioneer
+sailor
+cat
+kitten
+dog
+hound
+puppy
+bird
+pigeon
+seagull
+eagle
+horse
+cow
+chicken
+sheep
+goat
+lizard
+snake
+ai
+android
+robot
+cyborg
+hologram
+silhouette
+shadow
+blur
+cryptid
+creature
+beast
+monster
+spirit
+dawn
+morning
+sunrise
+afternoon
+noon
+midday
+evening
+dusk
+nightfall
+night
+twilight
+midnight
+breakfast
+lunch
+dinner
+summer
+spring
+winter
+autumn
+anime
+manga
+billboard
+advertisement
+collage
+mixed media art
+comic
+cariacature
+cartoon
+political cartoon
+embroidery
+tapestry
+stitching
+cross stitch
+etching
+engraving
+mosaic
+fresco
+print
+poster
+printout
+screenshot
+trail cam
+last known photograph of
+meme
+triptych
+diptych
+quadriptych
+illuminated manuscript
+tarot card
+simple
+simplistic
+home
+house
+petrol station
+gas station
+lake
+lakeside
+river
+riverside
+sea bed
+seabed
+sea floor
+abyss
+abyssal deeps
+deep sea
+sky
+skies
+alleyway
+alley
+supermarket
+grocery
+reality
+dimension
+moon
+planet
+asteroid
+space
+outer space
+void
+nebula
+asteroid belt
+spaceship
+space station
+dyson ring
+colorful
+colourful
+humorous
+humourous
+fish
+alien
+dragon
+early hours
+just after the rains
+before the incident
+dream
+illustration
+beautiful
+bold
+bright
+complex
+dark
+realistic
+hyperrealistic
+hyperdetailed
+surreal
+dreamlike
+detailed
+dramatic
+epic
+frightening
+inspiring
+intense
+intricate
+loud
+odd
+overwhelming
+stark
+stunning
+subtle
+symbolic
+unexpected
+atmospheric
+sprawling
+claustrophobic
+large
+small
+labyrinthine
+lively
+empty
+thriving
+quiet
+bustling
+charming
+crowded
+picturesque
+obscure
+delightful
+sad
+building
+castle
+village
+path
+portal
+door
+staircase
+machine
+car
+vehicle
+shipwreck
+temple
+cottage
+train station
+monastery
+church
+collection of machines
+library
+beach
+bog
+cave
+cavern
+coral reef
+desert
+dreamscape
+forest
+hills
+island
+islands
+jungle
+marsh
+meadow
+mountain peak
+mountains
+oasis
+plain
+rainforest
+prairie
+bush
+taiga
+ocean
+shallows
+pond
+savannah
+seascape
+shoreline
+steppe
+treetops
+tundra
+underwater
+wasteland
+woods
+cityscape
+urban street
+skyscraper
+tower
+garden
+suburb
+road
+highway
+city
+airport
+shop
+market
+plaza
+apartment building
+ship
+airplane
+haunted house
+ruins
+meatscape
+universe
+center of the universe
+restaurant at the end of the universe
+abandoned
+absorbing
+accepting
+acidic
+affable
+affectionate
+aggravating
+aggressive
+agitated
+airy
+alarming
+alienated
+angry
+anxious
+apprehensive
+arid
+baffling
+bashful
+bemusing
+bewildering
+bitter
+bland
+blissful
+boring
+brilliant
+bouncy
+brave
+brooding
+calm
+calming
+candid
+capricious
+charismatic
+cheerful
+chilling
+choleric
+classic
+cold
+comfortable
+compassionate
+complementary
+complicated
+concerning
+contemplative
+contemporary
+contrite
+creepy
+cynical
+daring
+defeated
+defiant
+delicate
+devious
+dimensional
+disappointing
+disciplined
+disengaged
+distant
+distinctive
+divine
+dreamy
+dry
+dynamic
+eager
+earnest
+earthy
+ecstatic
+edgy
+elated
+electrifying
+emboldening
+emergent
+emotional
+enchanting
+energetic
+enigmatic
+enraging
+enthusiastic
+epochal
+ethereal
+euphoric
+exciting
+expressive
+extravagant
+extreme
+extroverted
+fascinating
+fatalistic
+fatigued
+fearful
+fierce
+fiery
+flavorful
+focused
+fond
+foreboding
+forgiving
+forlorn
+fresh
+friendly
+funny
+furious
+futile
+generous
+glad
+gleeful
+gloomy
+glum
+gracious
+grateful
+grief-stricken
+grieving
+grim
+gritty
+grounded
+guarded
+guilty
+happy
+heartbroken
+heated
+homesick
+hopeful
+hostile
+humbling
+hysterical
+idyllic
+infused
+inquisitive
+insecure
+interesting
+intimidated
+intimidating
+introverted
+inventive
+inviting
+isolated
+jaded
+jealous
+jittery
+jocular
+joyful
+jubilant
+judgemental
+keen
+kidding
+kind
+kindhearted
+kinetic
+layered
+lazy
+lethargic
+lifelike
+lighthearted
+listless
+literal
+lonely
+longing
+loving
+luminous
+lyrical
+marvelous
+meandering
+meek
+melancholy
+merry
+mirthful
+mischievious
+miserable
+modest
+moody
+morose
+muted
+mysterious
+mystical
+nauseating
+needy
+neglected
+nervous
+nostalgic
+numb
+obligatory
+oblivious
+obsolete
+obstinate
+ominous
+open
+open-minded
+oppressive
+optimistic
+ordinary
+organic
+original
+ornate
+overjoyed
+overstimulated
+painful
+panicked
+passionate
+passive
+patriotic
+peaceful
+pensive
+perturbed
+pessimistic
+petrified
+phlegmatic
+placid
+playful
+pleasing
+poetic
+powerful
+powerless
+predatory
+pressured
+prideful
+quarrelsome
+quirky
+radiant
+rattled
+reasonable
+refined
+reflective
+refreshed
+rejuvenated
+relieved
+reluctant
+remorseful
+reserved
+resigned
+restful
+restless
+romantic
+rousing
+ruffled
+sanguine
+sarcastic
+saturated
+savory
+scornful
+self-assured
+sensitive
+sentimental
+serene
+serious
+sharp
+shocking
+silly
+skeptical
+smooth
+smug
+sociable
+sombre
+sorrowful
+sour
+sparse
+spellbinding
+spiritual
+spiteful
+stoic
+stressful
+stylish
+sublime
+surprising
+suspenseful
+sweet
+sympathetic
+tearful
+tender
+tense
+terrifying
+thoughtful
+threatening
+thrilling
+timeless
+timid
+torn
+tranquil
+triumphant
+troubled
+trusting
+trustworthy
+uncomfortable
+unconventional
+understanding
+uneasy
+unpredictable
+unruffled
+unsure
+uplifting
+vain
+valorous
+vexing
+vibrant
+victorious
+vigilant
+visionary
+vivacious
+vulnerable
+warm
+watchful
+wet
+whimsical
+willful
+wishful
+wistful
+withdrawn
+witty
+woeful
+wonderous
+worldly
+worried
+wrathful
+xenial
+yearning
+youthful
+zany
+zealous
+zestful
+aged
+anaglyph effect
+anaglyph filter
+avant-garde
+bokeh
+camcorder effect
+chillwave
+cottagecore
+crystalline
+cyanotype
+cosmic
+psychedelic
+dayglo
+dark academia
+fine
+fisheye lens
+fractalism
+futuresynth
+glitch art
+glowing
+gothic
+gothic art
+graffiti
+hyperrealism
+infrared
+inverted colors
+iridescent
+long exposure
+lovecraftian
+macro lens
+magic realism
+moist
+multiple exposure
+narrative realism
+optical illusion
+outrun
+pearlescent
+photorealism
+positivism
+realism
+retrowave
+retro
+rough
+sabattier effect
+sabattier filter
+shimmering
+street art
+superfine
+surrealism
+synthwave
+telephoto lens
+tilt-shift
+tintype
+tonalism
+vaporwave
+lucid dream
+steampunk
+atompunk
+biopunk
+cassette futurism
+cassettepunk
+catholicpunk
+clockpunk
+cloudpunk
+cyber noir
+cyberpunk
+decopunk
+dieselpunk
+dollpunk
+forestpunk
+formicapunk
+islandpunk
+nanopunk
+postcyberpunk
+raypunk
+rococopunk
+steelpunk
+stonepunk
+solarpunk
+hopepunk
+backlit
+moody lighting
+ethereal lighting
+museum lighting
+lens flare
+light shafts
+radiant light
+waning light
+morning light
+godrays
+cinematic lighting
+dappled lighting
+volumetric lighting
+caustic lighting
+chiaroscuro
+spotlighting
+ambient lighting
+in the golden hour
+in the blue hour
+before dawn
+before morning
+before afternoon
+before evening
+before dusk
+before night
+after dawn
+after morning
+after afternoon
+after evening
+after dusk
+after night
+photo
+closeup photo
+scenic photo
+selfie photo
+stock photo
+chalk art
+crayon art
+pixel art
+voxel art
+digital art
+modern art
+pottery art
+heraldic art
+stained glass art
+graffiti art
+poster art
+vector art
+line art
+concept art
+pop art
+fine art
+render
+3d render
+computer render
+low poly render
+watercolor painting
+oil painting
+goache painting
+acrylic painting
+matte painting
+cave painting
+finger painting
+pastel painting
+fresco painting
+digital painting
+spray painting
+palette knife painting
+encaustic painting
+enamel painting
+movie still
+movie frame
+movie shot
+movie trailer
+movie poster
+television show
+television still
+television frame
+television trailer
+shopping mall
+shopping center
+fairytale castle
+fantasy castle
+otherworldly castle
+magical castle
+gothic castle
+fairytale kingdom
+fantasy kingdom
+otherworldly kingdom
+magical kingdom
+gothic kingdom
+fairytale town
+fantasy town
+otherworldly town
+magical town
+gothic town
+fairytale village
+fantasy village
+otherworldly village
+magical village
+gothic village
+fairytale realm
+fantasy realm
+otherworldly realm
+magical realm
+gothic realm
+floating island
+flying island
+hovering island
+levitating island
+floating islands
+flying islands
+hovering islands
+levitating islands
+abandoned city
+postapocalyptic city
+ruined city
+desolate city
+abandoned wasteland
+postapocalyptic wasteland
+ruined wasteland
+desolate wasteland
+abandoned house
+postapocalyptic house
+ruined house
+desolate house
+alien landscape
+alien planet
+alien ruins
+alien spaceship
+alien moon
+alien quarry
+badlands
+bay
+bluff
+canyon
+cliff
+deciduous forest
+downs
+dune
+evergreen forest
+fen
+flats
+foothills
+geothermal area
+glacier
+grassland
+grove
+heath
+heights
+hill
+hollows
+lowland
+march
+mesa
+mixed forest
+moor
+morass
+mound
+mountain
+palm forest
+peak
+plains
+quagmire
+range
+rocky desert
+sands
+sandy desert
+sea
+shrubland
+slough
+sound
+subterranean area
+swamp
+thicket
+tropical area
+waste
+wetland
+woodland
+1500s
+16th century
+1600s
+17th century
+1700s
+18th century
+1800s
+19th century
+1900s
+20th century
+1920s
+the 20s
+1930s
+the 30s
+1940s
+the 40s
+1950s
+the 50s
+1960s
+the 60s
+1970s
+the 70s
+1980s
+the 80s
+1990s
+the 90s
+2000s
+the noughties
+21st century
+abstract art
+abstract expressionism
+abstract illusionism
+academic art
+action painting
+aestheticism
+afrofuturism
+altermodern
+american barbizon school
+american impressionism
+american realism
+american romanticism
+american scene painting
+analytical art
+antipodeans
+arabesque
+arbeitsrat für kunst
+art & language
+art brut
+art deco
+art informel
+art nouveau
+art photography
+arte povera
+arts and crafts movement
+ascii art
+ashcan school
+assemblage
+australian tonalism
+auto-destructive art
+barbizon school
+baroque
+bauhaus
+bengal school of art
+berlin secession
+black arts movement
+brutalism
+classical realism
+cloisonnism
+cobra
+color field
+computer art
+conceptual art
+concrete art
+constructivism
+context art
+crystal cubism
+cubism
+cubo-futurism
+cynical realism
+dada
+danube school
+dau-al-set
+de stijl
+deconstructivism
+dutch golden age
+ecological art
+environmental art
+excessivism
+expressionism
+fantastic realism
+fantasy art
+fauvism
+feminist art
+figuration libre
+figurative art
+figurativism
+fluxus
+folk art
+funk art
+furry art
+futurism
+generative art
+geometric abstract art
+german romanticism
+gutai group
+happening
+harlem renaissance
+heidelberg school
+holography
+hudson river school
+hurufiyya
+hypermodernism
+impressionism
+incoherents
+institutional critique
+interactive art
+international gothic
+international typographic style
+kinetic art
+kinetic pointillism
+kitsch movement
+land art
+les automatistes
+les nabis
+letterism
+light and space
+lowbrow
+luminism
+lyco art
+lyrical abstraction
+magical realism
+mail art
+mannerism
+massurrealism
+maximalism
+metaphysical painting
+mingei
+minimalism
+modern european ink painting
+modernism
+modular constructivism
+naive art
+naturalism
+neo-dada
+neo-expressionism
+neo-fauvism
+neo-figurative
+neo-primitivism
+neo-romanticism
+neoclassicism
+neogeo
+neoism
+neoplasticism
+net art
+new objectivity
+new sculpture
+northwest school
+nuclear art
+objective abstraction
+op art
+orphism
+panfuturism
+paris school
+photo-secession
+pictorialism
+plasticien
+plein air
+pointillism
+pop surrealism
+post-impressionism
+postminimalism
+pre-raphaelitism
+precisionism
+primitivism
+private press
+process art
+psychedelic art
+purism
+qajar art
+quito school
+rasquache
+rayonism
+regionalism
+remodernism
+renaissance
+retrofuturism
+rococo
+romanesque
+romanticism
+samikshavad
+serial art
+shin hanga
+shock art
+socialist realism
+sots art
+space art
+stuckism
+sumatraism
+superflat
+suprematism
+symbolism
+synchromism
+synthetism
+sōsaku hanga
+tachisme
+tenebrism
+temporary art
+toyism
+transgressive art
+ukiyo-e
+underground comix
+unilalianism
+vancouver school
+vanitas
+verdadism
+video art
+viennese actionism
+visual art
+vorticism
+academic
+biedermeier
+caravaggisti
+carolingian
+classicism
+color field painting
+dadaism
+deformalism
+der blaue reiter
+die brücke
+divisionism
+eclecticism
+ego-futurism
+existentialism
+formalism
+geometric abstraction
+gründerzeit
+hard-edge painting
+historicism
+humanism
+idealism
+illusionism
+immagine&poesia
+installation art
+intervention art
+jugendstil
+lettrism
+manierism
+merovingian
+metaphysical art
+monumentalism
+multiculturalism
+neo-classicism
+neo-geo
+neo-impressionism
+neo-minimalism
+neue slowenische kunst
+new media art
+nonconformism
+nouveau realisme
+ottonian
+outsider art
+performance art
+perspectivism
+pointilism
+post-conceptualism
+post-minimalism
+post-painterly abstraction
+post-structuralism
+postmodern art
+postmodernism
+pre-raphaelites
+relational art
+russian futurism
+russian symbolism
+scuola romana
+secularism
+situationist international
+social realism
+sound art
+structuralism
+stuckism international
+superstroke
+systems art
+tachism
+video game art
+red
+orange
+yellow
+green
+blue
+purple
+brown
+magenta
+tan
+cyan
+olive
+maroon
+navy
+turquoise
+silver
+lime
+teal
+indigo
+violet
+pink
+black
+white
+grey
+monochrome
+multicoloured
+prismatic
+black and white
+rainbow
+spectral
+ultraviolet
+amaranth
+amber
+amethyst
+apricot
+aquamarine
+azure
+baby blue
+beige
+blue-green
+blue-violet
+blush
+bronze
+burgundy
+byzantium
+carmine
+cerise
+cerulean
+champagne
+chartreuse green
+chocolate
+cobalt blue
+coffee
+copper
+coral
+crimson
+desert sand
+electric blue
+emerald
+erin
+gold
+gray
+harlequin
+ivory
+jade
+jungle green
+lavender
+lemon
+lilac
+magenta rose
+mauve
+navy blue
+neon
+ochre
+orange-red
+orchid
+peach
+pear
+periwinkle
+persian blue
+plum
+prussian blue
+puce
+raimbow sprimkle
+raspberry
+red-violet
+rose
+ruby
+salmon
+sangria
+sapphire
+scarlet
+slate gray
+spring bud
+spring green
+taupe
+ultramarine
+viridian
+dull
+exploring
+wandering
+waiting
+hanging out
+looking around
+glancing around
+staring around
+looking away
+glancing away
+staring away
+fighting
+struggling
+reading
+talking
+sleeping
+whispering
+performing
+singing
+dozing
+resting
+lying
+dreaming
+relaxing
+lazing
+creeping
+sneaking
+treading
+rushing
+escaping
+fleeing
+retreating
+flying
+falling
+drawing
+painting
+writing
+sketching
+dining
+eating
+snacking
+searching
+questing
+safe
+axe
+smoke
+air
+fire
+oil
+burn
+haze
+shard
+twin
+mist
+aon
+surge
+coin
+nicro
+blood
+soul
+true
+wind
+storm
+life
+pain
+span
+oath
+metal
+dust
+edge
+truth
+lie
+light
+else
+will
+stone
+gem
+bond
+bio
+micro
+envoy
+dire
+relay
+mate
+war
+work
+nimble
+art
+full
+base
+decay
+slick
+growth
+magic
+drab
+mine
+pun
+stick
+plot
+hand
+lash
+sand
+blade
+plate
+born
+bind
+shot
+arm
+eye
+gnat
+fly
+skin
+bone
+brain
+heart
+burst
+self
+cloud
+whisper
+reed
+gate
+bow
+mind
+run
+break
+bring
+book
+ass
+dice
+dance
+watch
+weave
+caller
+ward
+smith
+cast
+face
+chroma
+grav
+form
+shock
+craft
+wing
+dirt
+crunch
+crash
+rage
+mad
+ring
+orb
+cube
+power
+ram
+hack
+mare
+sonic
+way
+craddle
+curse
+wine
+end
+star
+forge
+thunder
+hunt
+quartz
+lotus
+brush
+sword
+rat
+rune
+body
+spine
+water
+ice
+techno
+husk
+jack
+band
+gang
+group
+skull
+wake
+pox
+rite
+quest
+corpse
+heap
+scrap
+essence
+shroud
+arch
+slime
+acid
+punk
+root
+time
+chief
+ghost
+lore
+rain
+earth
+robo
+mecha
+mega
+ultra
+might
+plague
+wild
+hymn
+splitter
+hell
+cell
+protein
+fat
+shell
+omen
+doom
+rock
+ink
+bloom
+day
+hoof
+plasma
+story
+tofu
+carbon
+ether
+aether
+quill
+hammer
+flame
+high
+sun
+old
