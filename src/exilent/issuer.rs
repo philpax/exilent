@@ -7,7 +7,7 @@ use crate::{
 use anyhow::Context;
 use serenity::{
     http::Http,
-    model::prelude::{component, ReactionType},
+    model::prelude::{component, ChannelId, ReactionType},
     prelude::Mentionable,
 };
 use stable_diffusion_a1111_webui_client as sd;
@@ -19,6 +19,7 @@ pub async fn generation_task(
     store: &Store,
     http: &Http,
     interaction: &dyn DiscordInteraction,
+    result_channel_override: Option<ChannelId>,
     (prompt, negative_prompt): (&str, Option<&str>),
     image_generation: Option<store::ImageGeneration>,
 ) -> anyhow::Result<()> {
@@ -138,8 +139,8 @@ pub async fn generation_task(
         );
         let store_key = store.insert_generation(generation)?;
 
-        let final_message = interaction
-            .channel_id()
+        let final_message = result_channel_override
+            .unwrap_or(interaction.channel_id())
             .send_files(&http, [(bytes.as_slice(), filename.as_str())], |m| {
                 m.content(message).components(|c| {
                     let e = &Configuration::get().emojis;
@@ -189,8 +190,10 @@ pub async fn generation_task(
                     })
                 });
 
-                if let Some(message) = interaction.message() {
-                    m.reference_message(message);
+                if result_channel_override.is_none() {
+                    if let Some(message) = interaction.message() {
+                        m.reference_message(message);
+                    }
                 }
 
                 m

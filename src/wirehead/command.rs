@@ -18,6 +18,7 @@ use serenity::{
         },
         ChannelId,
     },
+    prelude::Mentionable,
 };
 use stable_diffusion_a1111_webui_client as sd;
 use std::{collections::HashMap, fmt::Display, sync::Arc};
@@ -45,6 +46,13 @@ pub async fn register(http: &Http, models: &[sd::Model]) -> anyhow::Result<()> {
                     o
                 });
 
+                o.create_sub_option(|o| {
+                    o.kind(CommandOptionType::Boolean)
+                        .name(constant::value::TO_EXILENT_ENABLED)
+                        .description("Whether or not the To Exilent button post-rating is shown")
+                        .required(true)
+                });
+
                 command::populate_generate_options(
                     |opt| {
                         o.add_sub_option(opt);
@@ -57,9 +65,11 @@ pub async fn register(http: &Http, models: &[sd::Model]) -> anyhow::Result<()> {
                     o.kind(CommandOptionType::Boolean)
                         .name(constant::value::HIDE_PROMPT)
                         .description("Whether or not to hide the prompt for generations")
-                });
-
-                o
+                }).create_sub_option(|o| {
+                    o.kind(CommandOptionType::Channel)
+                        .name(constant::value::TO_EXILENT_CHANNEL)
+                        .description("The channel to send To Exilent results to. If not set, results will be sent to the same channel.")
+                })
             })
             .create_option(|o| {
                 o.kind(CommandOptionType::SubCommand)
@@ -119,6 +129,18 @@ async fn start(
         .and_then(util::value_to_bool)
         .unwrap_or(false);
 
+    let to_exilent_enabled =
+        util::get_value(&subcommand.options, constant::value::TO_EXILENT_ENABLED)
+            .and_then(util::value_to_bool)
+            .unwrap();
+
+    let to_exilent_channel =
+        util::get_value(&subcommand.options, constant::value::TO_EXILENT_CHANNEL)
+            .and_then(util::value_to_channel);
+    if !to_exilent_enabled && to_exilent_channel.is_some() {
+        anyhow::bail!("a To Exilent channel was set, but To Exilent is not enabled");
+    }
+
     let params = command::OwnedBaseGenerationParameters::load(
         cmd.user.id,
         &subcommand.options,
@@ -153,6 +175,10 @@ async fn start(
                     "Model",
                     display(&params.model.as_ref().map(|s| &s.name as &dyn Display))
                 ),
+                (
+                    "To Exilent channel",
+                    display(&to_exilent_channel.as_ref().map(|c| c.id.mention()))
+                )
             ]
             .into_iter()
             .filter_map(|(key, value)| Some((key, value?)))
@@ -176,6 +202,9 @@ async fn start(
         super::Session::new(
             http,
             cmd.channel_id,
+            to_exilent_channel
+                .map(|c| c.id)
+                .filter(|_| to_exilent_enabled),
             client.clone(),
             params,
             tags,

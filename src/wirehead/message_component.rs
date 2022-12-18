@@ -27,7 +27,7 @@ pub async fn to_exilent(
     genome: TextGenome,
     seed: i64,
 ) -> anyhow::Result<()> {
-    let Some((tags, parameters)) = sessions.lock().get(&mci.channel_id).map(|s| (s.tags.clone(), s.parameters.clone())) else {
+    let Some((tags, parameters, to_exilent_channel_id)) = sessions.lock().get(&mci.channel_id).map(|s| (s.tags.clone(), s.parameters.clone(), s.to_exilent_channel_id.clone())) else {
         mci.create_interaction_response(http, |m| {
             m.kind(InteractionResponseType::ChannelMessageWithSource)
                 .interaction_response_data(|d| d.content("there is no active session"))
@@ -37,7 +37,16 @@ pub async fn to_exilent(
         return Ok(());
     };
 
-    mci.create(http, "Generating with Exilent...").await?;
+    mci.create(
+        http,
+        &format!(
+            "Generating with Exilent{}...",
+            to_exilent_channel_id
+                .map(|c| format!(" in {}", c.mention()))
+                .unwrap_or_default()
+        ),
+    )
+    .await?;
 
     let base = {
         let mut base = sd::BaseGenerationRequest {
@@ -59,6 +68,7 @@ pub async fn to_exilent(
         store,
         http,
         &mci,
+        to_exilent_channel_id,
         (&prompt, negative_prompt.as_deref()),
         None,
     )
@@ -85,22 +95,28 @@ pub async fn rate(
     };
 
     // this is a bit of a contortion but it's fine for now
-    let (tags, hide_prompt) = if let Some(session) = sessions.lock().get(&mci.channel_id) {
-        session.rate(
-            genome.clone(),
-            match custom_id.value {
-                cid::WireheadValue::Negative2 => 0,
-                cid::WireheadValue::Negative1 => 25,
-                cid::WireheadValue::Zero => 50,
-                cid::WireheadValue::Positive1 => 75,
-                cid::WireheadValue::Positive2 => 100,
-                cid::WireheadValue::ToExilent => unreachable!(),
-            },
-        );
-        (session.tags.clone(), session.hide_prompt)
-    } else {
-        (vec![], false)
-    };
+    let (tags, hide_prompt, to_exilent_enabled) = sessions
+        .lock()
+        .get(&mci.channel_id)
+        .map(|session| {
+            session.rate(
+                genome.clone(),
+                match custom_id.value {
+                    cid::WireheadValue::Negative2 => 0,
+                    cid::WireheadValue::Negative1 => 25,
+                    cid::WireheadValue::Zero => 50,
+                    cid::WireheadValue::Positive1 => 75,
+                    cid::WireheadValue::Positive2 => 100,
+                    cid::WireheadValue::ToExilent => unreachable!(),
+                },
+            );
+            (
+                session.tags.clone(),
+                session.hide_prompt,
+                session.to_exilent_channel_id.is_some(),
+            )
+        })
+        .unwrap_or_default();
 
     mci.create_interaction_response(http, |m| {
         m.kind(InteractionResponseType::UpdateMessage)
@@ -116,15 +132,20 @@ pub async fn rate(
                     mci.user.mention(),
                 ))
                 .components(|c| {
-                    c.create_action_row(|row| {
-                        row.create_button(|b| {
-                            b.custom_id(
-                                cid::WireheadValue::ToExilent.to_id(genome.clone(), custom_id.seed),
-                            )
-                            .label("To Exilent")
-                            .style(ButtonStyle::Primary)
+                    if to_exilent_enabled {
+                        c.create_action_row(|row| {
+                            row.create_button(|b| {
+                                b.custom_id(
+                                    cid::WireheadValue::ToExilent
+                                        .to_id(genome.clone(), custom_id.seed),
+                                )
+                                .label("To Exilent")
+                                .style(ButtonStyle::Primary)
+                            })
                         })
-                    })
+                    } else {
+                        c
+                    }
                 })
             })
     })

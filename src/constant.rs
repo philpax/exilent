@@ -34,6 +34,8 @@ pub mod value {
 
     pub const TAGS: &str = "tags";
     pub const HIDE_PROMPT: &str = "hide_prompt";
+    pub const TO_EXILENT_ENABLED: &str = "to_exilent_enabled";
+    pub const TO_EXILENT_CHANNEL: &str = "to_exilent_channel";
 
     /// Discord allows for a maximum of 25 options in a choice
     pub const MODEL_CHUNK_COUNT: usize = 25;

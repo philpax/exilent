@@ -406,6 +406,7 @@ pub async fn paint(
         store,
         http,
         interaction,
+        None,
         (&prompt, negative_prompt.as_deref()),
         None,
     )
@@ -481,6 +482,7 @@ pub async fn paintover(
         store,
         http,
         interaction,
+        None,
         (&prompt, negative_prompt.as_deref()),
         Some(store::ImageGeneration {
             init_image: image.clone(),

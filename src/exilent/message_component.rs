@@ -281,6 +281,7 @@ pub async fn interrogate_generate(
         store,
         http,
         interaction,
+        None,
         (prompt.as_str(), None),
         None,
     )
@@ -472,6 +473,7 @@ async fn retry_impl(
         store,
         http,
         interaction,
+        None,
         (
             &request.base().prompt,
             request.base().negative_prompt.as_deref(),

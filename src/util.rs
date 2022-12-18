@@ -12,7 +12,7 @@ use serenity::{
                 modal::ModalSubmitInteraction,
                 InteractionResponseType,
             },
-            ChannelId, Message,
+            ChannelId, Message, PartialChannel,
         },
         user::User,
     },
@@ -71,6 +71,13 @@ pub fn value_to_bool(v: &CommandDataOptionValue) -> Option<bool> {
 pub fn value_to_attachment_url(v: &CommandDataOptionValue) -> Option<String> {
     match v {
         CommandDataOptionValue::Attachment(v) => Some(v.url.clone()),
+        _ => None,
+    }
+}
+
+pub fn value_to_channel(v: &CommandDataOptionValue) -> Option<PartialChannel> {
+    match v {
+        CommandDataOptionValue::Channel(v) => Some(v.clone()),
         _ => None,
     }
 }

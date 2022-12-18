@@ -14,6 +14,7 @@ use std::sync::{
 pub async fn task(
     http: Arc<Http>,
     channel_id: ChannelId,
+    to_exilent_enabled: bool,
     client: Arc<sd::Client>,
     params: OwnedBaseGenerationParameters,
     fitness_store: Arc<FitnessStore>,
@@ -43,13 +44,17 @@ pub async fn task(
                         }
                     ))
                     .components(|c| {
-                        c.create_action_row(|row| {
-                            row.create_button(|b| {
-                                b.custom_id(cid::WireheadValue::ToExilent.to_id(genome, seed))
-                                    .label("To Exilent")
-                                    .style(ButtonStyle::Primary)
+                        if to_exilent_enabled {
+                            c.create_action_row(|row| {
+                                row.create_button(|b| {
+                                    b.custom_id(cid::WireheadValue::ToExilent.to_id(genome, seed))
+                                        .label("To Exilent")
+                                        .style(ButtonStyle::Primary)
+                                })
                             })
-                        })
+                        } else {
+                            c
+                        }
                     })
                 })
                 .await?;

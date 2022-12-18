@@ -17,14 +17,16 @@ pub struct Session {
     _message_task: tokio::task::JoinHandle<anyhow::Result<()>>,
     fitness_store: Arc<FitnessStore>,
     shutdown: Arc<AtomicBool>,
-    pub tags: Vec<String>,
-    pub hide_prompt: bool,
-    pub parameters: OwnedBaseGenerationParameters,
+    tags: Vec<String>,
+    hide_prompt: bool,
+    parameters: OwnedBaseGenerationParameters,
+    to_exilent_channel_id: Option<ChannelId>,
 }
 impl Session {
     pub fn new(
         http: Arc<Http>,
         channel_id: ChannelId,
+        to_exilent_channel_id: Option<ChannelId>,
         client: Arc<sd::Client>,
         parameters: OwnedBaseGenerationParameters,
         tags: Vec<String>,
@@ -45,6 +47,7 @@ impl Session {
         let message_task = tokio::task::spawn(message_task::task(
             http,
             channel_id,
+            to_exilent_channel_id.is_some(),
             client,
             parameters.clone(),
             fitness_store.clone(),
@@ -62,6 +65,7 @@ impl Session {
             tags,
             hide_prompt,
             parameters,
+            to_exilent_channel_id,
         })
     }
 
