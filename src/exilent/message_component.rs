@@ -459,6 +459,7 @@ async fn retry_impl(
                     .base()
                     .negative_prompt
                     .as_ref()
+                    .filter(|s| !s.is_empty())
                     .map(|s| format!(" - `{s}`"))
                     .unwrap_or_default()
             ),
@@ -513,7 +514,7 @@ impl<'a> Overrides<'a> {
 
         Self {
             prompt: prompt.filter(|s| !s.is_empty()),
-            negative_prompt: negative_prompt.filter(|s| !s.is_empty()),
+            negative_prompt: negative_prompt,
             width,
             height,
             guidance_scale: guidance_scale
