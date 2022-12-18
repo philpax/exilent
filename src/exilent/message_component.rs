@@ -516,7 +516,7 @@ impl<'a> Overrides<'a> {
 
         Self {
             prompt: prompt.filter(|s| !s.is_empty()),
-            negative_prompt: negative_prompt,
+            negative_prompt,
             width,
             height,
             guidance_scale: guidance_scale

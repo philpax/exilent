@@ -25,6 +25,7 @@ pub struct Session {
     to_exilent_channel_id: Option<ChannelId>,
 }
 impl Session {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         http: Arc<Http>,
         channel_id: ChannelId,

@@ -44,7 +44,7 @@ pub async fn to_exilent(
             (
                 s.tags.clone(),
                 s.parameters.clone(),
-                s.to_exilent_channel_id.clone(),
+                s.to_exilent_channel_id,
                 s.prefix.clone(),
                 s.suffix.clone(),
             )

@@ -13,6 +13,7 @@ use serenity::{
 use stable_diffusion_a1111_webui_client as sd;
 use std::time::Duration;
 
+#[allow(clippy::too_many_arguments)]
 pub async fn generation_task(
     task: sd::GenerationTask,
     models: &[sd::Model],
@@ -140,7 +141,7 @@ pub async fn generation_task(
         let store_key = store.insert_generation(generation)?;
 
         let final_message = result_channel_override
-            .unwrap_or(interaction.channel_id())
+            .unwrap_or_else(|| interaction.channel_id())
             .send_files(&http, [(bytes.as_slice(), filename.as_str())], |m| {
                 m.content(message).components(|c| {
                     let e = &Configuration::get().emojis;
