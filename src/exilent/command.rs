@@ -389,6 +389,7 @@ pub async fn paint(
                 &base.prompt,
                 base.negative_prompt
                     .as_ref()
+                    .filter(|s| !s.is_empty())
                     .map(|s| format!(" - `{s}`"))
                     .unwrap_or_default()
             ),
@@ -460,6 +461,7 @@ pub async fn paintover(
                 &base.prompt,
                 base.negative_prompt
                     .as_deref()
+                    .filter(|s| !s.is_empty())
                     .map(|s| format!(" - `{s}`"))
                     .unwrap_or_default(),
                 url

@@ -45,6 +45,7 @@ pub async fn generation_task(
                     "`{}`{}{}: {:.02}% complete. ({:.02} seconds remaining)",
                     prompt,
                     negative_prompt
+                        .filter(|s| !s.is_empty())
                         .map(|s| format!(" - `{s}`"))
                         .unwrap_or_default(),
                     image_generation
@@ -99,6 +100,7 @@ pub async fn generation_task(
                     "`{}`{}: Uploading {}/{}...",
                     prompt,
                     negative_prompt
+                        .filter(|s| !s.is_empty())
                         .map(|s| format!(" - `{s}`"))
                         .unwrap_or_default(),
                     idx + 1,
