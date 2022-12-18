@@ -20,6 +20,8 @@ pub async fn task(
     fitness_store: Arc<FitnessStore>,
     shutdown: Arc<AtomicBool>,
     tags: Vec<String>,
+    prefix: Option<String>,
+    suffix: Option<String>,
     result_rx: flume::Receiver<TextGenome>,
     hide_prompt: bool,
 ) -> anyhow::Result<()> {
@@ -29,7 +31,7 @@ pub async fn task(
         }
 
         if let Ok(genome) = result_rx.try_recv() {
-            let prompt = genome.as_text(&tags);
+            let prompt = genome.as_text(&tags, prefix.as_deref(), suffix.as_deref());
             let (image, seed) =
                 generate(&client, params.as_base_generation_request(), prompt.clone()).await?;
 
@@ -66,7 +68,7 @@ pub async fn task(
             let (image, seed) = generate(
                 &client,
                 params.as_base_generation_request(),
-                genome.as_text(&tags),
+                genome.as_text(&tags, prefix.as_deref(), suffix.as_deref()),
             )
             .await?;
 
@@ -104,7 +106,10 @@ pub async fn task(
                     });
 
                     if !hide_prompt {
-                        m.content(format!("`{}`", genome.as_text(&tags)));
+                        m.content(format!(
+                            "`{}`",
+                            genome.as_text(&tags, prefix.as_deref(), suffix.as_deref())
+                        ));
                     }
 
                     m

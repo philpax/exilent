@@ -69,6 +69,14 @@ pub async fn register(http: &Http, models: &[sd::Model]) -> anyhow::Result<()> {
                     o.kind(CommandOptionType::Channel)
                         .name(constant::value::TO_EXILENT_CHANNEL)
                         .description("The channel to send To Exilent results to. If not set, results will be sent to the same channel.")
+                }).create_sub_option(|o| {
+                    o.kind(CommandOptionType::String)
+                        .name(constant::value::PREFIX)
+                        .description("A prefix to add to the generation prompt. (Will be joined by a comma)")
+                }).create_sub_option(|o| {
+                    o.kind(CommandOptionType::String)
+                        .name(constant::value::SUFFIX)
+                        .description("A prefix to add to the generation prompt. (Will be joined by a comma)")
                 })
             })
             .create_option(|o| {
@@ -141,6 +149,11 @@ async fn start(
         anyhow::bail!("a To Exilent channel was set, but To Exilent is not enabled");
     }
 
+    let prefix = util::get_value(&subcommand.options, constant::value::PREFIX)
+        .and_then(util::value_to_string);
+    let suffix = util::get_value(&subcommand.options, constant::value::SUFFIX)
+        .and_then(util::value_to_string);
+
     let params = command::OwnedBaseGenerationParameters::load(
         cmd.user.id,
         &subcommand.options,
@@ -160,6 +173,8 @@ async fn start(
             "Starting with the following settings:\n{}",
             [
                 ("Tags", Some(&tag_selection as &dyn Display)),
+                ("Prefix", display(&prefix)),
+                ("Suffix", display(&suffix)),
                 ("Negative prompt", display(&params.negative_prompt)),
                 ("Seed", display(&params.seed)),
                 ("Count", display(&params.batch_count)),
@@ -209,6 +224,8 @@ async fn start(
             params,
             tags,
             hide_prompt,
+            prefix,
+            suffix,
         )?,
     );
     Ok(())

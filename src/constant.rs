@@ -36,6 +36,8 @@ pub mod value {
     pub const HIDE_PROMPT: &str = "hide_prompt";
     pub const TO_EXILENT_ENABLED: &str = "to_exilent_enabled";
     pub const TO_EXILENT_CHANNEL: &str = "to_exilent_channel";
+    pub const PREFIX: &str = "prefix";
+    pub const SUFFIX: &str = "suffix";
 
     /// Discord allows for a maximum of 25 options in a choice
     pub const MODEL_CHUNK_COUNT: usize = 25;

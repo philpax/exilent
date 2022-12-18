@@ -18,6 +18,8 @@ pub struct Session {
     fitness_store: Arc<FitnessStore>,
     shutdown: Arc<AtomicBool>,
     tags: Vec<String>,
+    prefix: Option<String>,
+    suffix: Option<String>,
     hide_prompt: bool,
     parameters: OwnedBaseGenerationParameters,
     to_exilent_channel_id: Option<ChannelId>,
@@ -31,6 +33,8 @@ impl Session {
         parameters: OwnedBaseGenerationParameters,
         tags: Vec<String>,
         hide_prompt: bool,
+        prefix: Option<String>,
+        suffix: Option<String>,
     ) -> anyhow::Result<Self> {
         let shutdown = Arc::new(AtomicBool::new(false));
         let fitness_store = Arc::new(FitnessStore::new(shutdown.clone()));
@@ -53,6 +57,8 @@ impl Session {
             fitness_store.clone(),
             shutdown.clone(),
             tags.clone(),
+            prefix.clone(),
+            suffix.clone(),
             result_rx,
             hide_prompt,
         ));
@@ -63,6 +69,8 @@ impl Session {
             fitness_store,
             shutdown,
             tags,
+            prefix,
+            suffix,
             hide_prompt,
             parameters,
             to_exilent_channel_id,

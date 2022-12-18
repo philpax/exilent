@@ -27,7 +27,7 @@ pub async fn to_exilent(
     genome: TextGenome,
     seed: i64,
 ) -> anyhow::Result<()> {
-    let Some((tags, parameters, to_exilent_channel_id)) = sessions.lock().get(&mci.channel_id).map(|s| (s.tags.clone(), s.parameters.clone(), s.to_exilent_channel_id.clone())) else {
+    if !sessions.lock().contains_key(&mci.channel_id) {
         mci.create_interaction_response(http, |m| {
             m.kind(InteractionResponseType::ChannelMessageWithSource)
                 .interaction_response_data(|d| d.content("there is no active session"))
@@ -36,6 +36,20 @@ pub async fn to_exilent(
 
         return Ok(());
     };
+
+    let (tags, parameters, to_exilent_channel_id, prefix, suffix) = sessions
+        .lock()
+        .get(&mci.channel_id)
+        .map(|s| {
+            (
+                s.tags.clone(),
+                s.parameters.clone(),
+                s.to_exilent_channel_id.clone(),
+                s.prefix.clone(),
+                s.suffix.clone(),
+            )
+        })
+        .unwrap();
 
     mci.create(
         http,
@@ -50,7 +64,7 @@ pub async fn to_exilent(
 
     let base = {
         let mut base = sd::BaseGenerationRequest {
-            prompt: genome.as_text(&tags),
+            prompt: genome.as_text(&tags, prefix.as_deref(), suffix.as_deref()),
             ..parameters.as_base_generation_request()
         };
         util::fixup_base_generation_request(&mut base);
@@ -95,7 +109,7 @@ pub async fn rate(
     };
 
     // this is a bit of a contortion but it's fine for now
-    let (tags, hide_prompt, to_exilent_enabled) = sessions
+    let (tags, hide_prompt, to_exilent_enabled, prefix, suffix) = sessions
         .lock()
         .get(&mci.channel_id)
         .map(|session| {
@@ -114,6 +128,8 @@ pub async fn rate(
                 session.tags.clone(),
                 session.hide_prompt,
                 session.to_exilent_channel_id.is_some(),
+                session.prefix.clone(),
+                session.suffix.clone(),
             )
         })
         .unwrap_or_default();
@@ -124,7 +140,10 @@ pub async fn rate(
                 d.content(format!(
                     "{}**Rating**: {} by {}",
                     if !hide_prompt {
-                        format!("`{}` | ", genome.as_text(&tags))
+                        format!(
+                            "`{}` | ",
+                            genome.as_text(&tags, prefix.as_deref(), suffix.as_deref())
+                        )
                     } else {
                         String::new()
                     },
