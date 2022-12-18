@@ -1,6 +1,8 @@
 use super::issuer;
 use crate::{
-    command, constant, custom_id as cid, store,
+    command,
+    config::Configuration,
+    constant, custom_id as cid, store,
     util::{self, DiscordInteraction},
 };
 use anyhow::Context;
@@ -20,7 +22,7 @@ use std::collections::HashMap;
 pub async fn register(http: &Http, models: &[sd::Model]) -> anyhow::Result<()> {
     Command::create_global_application_command(http, |command| {
         command
-            .name(constant::command::PAINT)
+            .name(&Configuration::get().commands.paint)
             .description("Paints your dreams");
 
         command::populate_generate_options(
@@ -36,7 +38,7 @@ pub async fn register(http: &Http, models: &[sd::Model]) -> anyhow::Result<()> {
 
     Command::create_global_application_command(http, |command| {
         command
-            .name(constant::command::PAINTOVER)
+            .name(&Configuration::get().commands.paintover)
             .description("Paints your dreams over another image");
 
         command::populate_generate_options(
@@ -76,14 +78,14 @@ pub async fn register(http: &Http, models: &[sd::Model]) -> anyhow::Result<()> {
 
     Command::create_global_application_command(http, |command| {
         command
-            .name(constant::command::PAINTAGAIN)
+            .name(&Configuration::get().commands.paintagain)
             .description("Re-run the last generation command with a modal of overrides")
     })
     .await?;
 
     Command::create_global_application_command(http, |command| {
         command
-            .name(constant::command::POSTPROCESS)
+            .name(&Configuration::get().commands.postprocess)
             .description("Postprocesses an image");
 
         command
@@ -179,7 +181,7 @@ pub async fn register(http: &Http, models: &[sd::Model]) -> anyhow::Result<()> {
 
     Command::create_global_application_command(http, |command| {
         command
-            .name(constant::command::INTERROGATE)
+            .name(&Configuration::get().commands.interrogate)
             .description("Interrogates an image to produce a caption")
             .create_option(|option| {
                 let opt = option
@@ -211,7 +213,7 @@ pub async fn register(http: &Http, models: &[sd::Model]) -> anyhow::Result<()> {
 
     Command::create_global_application_command(http, |command| {
         command
-            .name(constant::command::EXILENT)
+            .name(&Configuration::get().commands.exilent)
             .description("Meta-commands for Exilent")
             .create_option(|option| {
                 option
@@ -230,7 +232,7 @@ pub async fn register(http: &Http, models: &[sd::Model]) -> anyhow::Result<()> {
 
     Command::create_global_application_command(http, |command| {
         command
-            .name(constant::command::PNG_INFO)
+            .name(&Configuration::get().commands.png_info)
             .description("Retrieves the embedded PNG info of an image")
             .create_option(|option| {
                 option

@@ -1,5 +1,6 @@
 use super::issuer;
 use crate::{
+    config::Configuration,
     constant, custom_id as cid, store,
     util::{self, DiscordInteraction},
 };
@@ -458,6 +459,7 @@ async fn retry_impl(
                     .base()
                     .negative_prompt
                     .as_ref()
+                    .filter(|s| !s.is_empty())
                     .map(|s| format!(" - `{s}`"))
                     .unwrap_or_default()
             ),
@@ -508,16 +510,16 @@ impl<'a> Overrides<'a> {
         denoising_strength: Option<f64>,
         paintover: bool,
     ) -> Self {
-        use constant::limits as L;
+        let l = &Configuration::get().limits;
 
         Self {
             prompt: prompt.filter(|s| !s.is_empty()),
-            negative_prompt: negative_prompt.filter(|s| !s.is_empty()),
+            negative_prompt: negative_prompt,
             width,
             height,
             guidance_scale: guidance_scale
-                .map(|s| s.clamp(L::GUIDANCE_SCALE_MIN, L::GUIDANCE_SCALE_MAX)),
-            steps: steps.map(|s| s.clamp(L::STEPS_MIN, L::STEPS_MAX)),
+                .map(|s| s.clamp(l.guidance_scale_min, l.guidance_scale_max)),
+            steps: steps.map(|s| s.clamp(l.steps_min, l.steps_max)),
             seed,
             denoising_strength: denoising_strength.map(|s| s.clamp(0.0, 1.0)),
             paintover,

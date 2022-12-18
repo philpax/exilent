@@ -18,7 +18,7 @@ use serenity::{
     },
 };
 
-use crate::{constant, sd};
+use crate::{config::Configuration, constant, sd};
 
 pub fn get_value<'a>(
     options: &'a [CommandDataOption],
@@ -110,10 +110,7 @@ pub fn find_model_by_hash(models: &[sd::Model], model_hash: &str) -> Option<(usi
     models
         .iter()
         .enumerate()
-        .find(|(_, m)| {
-            let Some(hash_wrapped) = m.title.split_ascii_whitespace().last() else { return false };
-            &hash_wrapped[1..hash_wrapped.len() - 1] == model_hash
-        })
+        .find(|(_, m)| extract_last_bracketed_string(&m.title) == Some(model_hash))
         .map(|(idx, model)| (idx, model.clone()))
 }
 
@@ -134,21 +131,20 @@ pub fn fixup_base_generation_request(params: &mut sd::BaseGenerationRequest) {
     }
 }
 
+pub fn extract_last_bracketed_string(string: &str) -> Option<&str> {
+    let left = string.rfind('[')?;
+    let right = string.rfind(']')?;
+    (left < right).then_some(&string[left + 1..right])
+}
+
 fn extract_keywords(model_name: &str) -> Vec<&str> {
-    let left_index = model_name.rfind('[');
-    let right_index = model_name.rfind(']');
-    if let Some((left, right)) = left_index.zip(right_index) {
-        model_name[left + 1..right]
-            .split(',')
-            .map(|s| s.trim())
-            .collect()
-    } else {
-        vec![]
-    }
+    extract_last_bracketed_string(model_name)
+        .map(|s| s.split(',').map(|s| s.trim()).collect())
+        .unwrap_or_default()
 }
 
 fn prepend_keyword_if_necessary(prompt: &str, model_name: &str) -> String {
-    if !constant::config::AUTOMATICALLY_PREPEND_KEYWORD {
+    if !Configuration::get().general.automatically_prepend_keyword {
         return prompt.to_string();
     }
 
@@ -169,20 +165,24 @@ fn prepend_keyword_if_necessary_unchecked(prompt: &str, model_name: &str) -> Str
 }
 
 fn fixup_resolution(width: u32, height: u32) -> (u32, u32) {
-    use constant::limits::{HEIGHT_MAX, WIDTH_MAX};
+    let crate::config::Limits {
+        width_max,
+        height_max,
+        ..
+    } = Configuration::get().limits;
 
     let mut width = width;
     let mut height = height;
     const ROUND_PRECISION: u32 = 64;
 
-    if width > WIDTH_MAX {
-        let scale_factor = (width as f32) / (WIDTH_MAX as f32);
+    if width > width_max {
+        let scale_factor = (width as f32) / (width_max as f32);
         width = ((width as f32) / scale_factor) as u32;
         height = ((height as f32) / scale_factor) as u32;
     }
 
-    if height > HEIGHT_MAX {
-        let scale_factor = (height as f32) / (HEIGHT_MAX as f32);
+    if height > height_max {
+        let scale_factor = (height as f32) / (height_max as f32);
         width = ((width as f32) / scale_factor) as u32;
         height = ((height as f32) / scale_factor) as u32;
     }
