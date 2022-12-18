@@ -144,10 +144,14 @@ async fn start(
 
     let to_exilent_channel =
         util::get_value(&subcommand.options, constant::value::TO_EXILENT_CHANNEL)
-            .and_then(util::value_to_channel);
+            .and_then(util::value_to_channel)
+            .map(|c| c.id);
     if !to_exilent_enabled && to_exilent_channel.is_some() {
         anyhow::bail!("a To Exilent channel was set, but To Exilent is not enabled");
     }
+    let to_exilent_channel_id = to_exilent_channel
+        .or(Some(cmd.channel_id))
+        .filter(|_| to_exilent_enabled);
 
     let prefix = util::get_value(&subcommand.options, constant::value::PREFIX)
         .and_then(util::value_to_string);
@@ -192,7 +196,7 @@ async fn start(
                 ),
                 (
                     "To Exilent channel",
-                    display(&to_exilent_channel.as_ref().map(|c| c.id.mention()))
+                    display(&to_exilent_channel_id.map(|c| c.mention()))
                 )
             ]
             .into_iter()
@@ -217,9 +221,7 @@ async fn start(
         super::Session::new(
             http,
             cmd.channel_id,
-            to_exilent_channel
-                .map(|c| c.id)
-                .filter(|_| to_exilent_enabled),
+            to_exilent_channel_id,
             client.clone(),
             params,
             tags,
