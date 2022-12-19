@@ -232,7 +232,32 @@ pub async fn register(http: &Http, models: &[sd::Model]) -> anyhow::Result<()> {
 
     Command::create_global_application_command(http, |command| {
         command
-            .name(&Configuration::get().commands.png_info)
+            .name(&Configuration::get().commands.presets)
+            .description("Set, view and manage preset options")
+            .create_option(|o| {
+                o.kind(CommandOptionType::SubCommand)
+                    .name("view")
+                    .description("View presets");
+                o
+            })
+            .create_option(|o| {
+                o.kind(CommandOptionType::SubCommand)
+                    .name("set")
+                    .description("Set a preset");
+                o
+            })
+            .create_option(|o| {
+                o.kind(CommandOptionType::SubCommand)
+                    .name("delete")
+                    .description("Delete a preset");
+                o
+            })
+    })
+    .await?;
+
+    Command::create_global_application_command(http, |command| {
+        command
+            .name(&Configuration::get().commands.presets)
             .description("Retrieves the embedded PNG info of an image")
             .create_option(|option| {
                 option
@@ -643,5 +668,62 @@ pub async fn png_info(
     let result = client.png_info(&bytes).await?;
     interaction.edit(http, &result).await?;
 
+    Ok(())
+}
+
+async fn stats(
+    models: &[sd::Model],
+    store: &store::Store,
+    http: &Http,
+    cmd: ApplicationCommandInteraction,
+) -> anyhow::Result<()> {
+    let stats = store.get_model_usage_counts()?;
+    async fn get_user_name(
+        http: &Http,
+        guild_id: Option<GuildId>,
+        id: UserId,
+    ) -> anyhow::Result<(UserId, String)> {
+        let user = id.to_user(http).await?;
+        let name = if let Some(guild_id) = guild_id {
+            user.nick_in(http, guild_id).await
+        } else {
+            None
+        };
+        Ok((id, name.unwrap_or(user.name)))
+    }
+    let users = futures::future::join_all(
+        stats
+            .keys()
+            .map(|id| get_user_name(http, cmd.guild_id, *id)),
+    )
+    .await
+    .into_iter()
+    .collect::<Result<HashMap<_, _>, _>>()?;
+
+    let message = stats
+        .into_iter()
+        .flat_map(|(user, counts)| {
+            std::iter::once(format!(
+                "**{}**",
+                users
+                    .get(&user)
+                    .map(|s| s.as_str())
+                    .unwrap_or("unknown user")
+            ))
+            .chain(counts.into_iter().map(|(model_hash, count)| {
+                format!(
+                    "- {}: {} generations",
+                    util::find_model_by_hash(models, &model_hash)
+                        .as_ref()
+                        .map(|m| m.1.name.as_str())
+                        .unwrap_or("unknown model"),
+                    count
+                )
+            }))
+        })
+        .collect::<Vec<String>>()
+        .join("\n");
+
+    cmd.create(http, &message).await?;
     Ok(())
 }
