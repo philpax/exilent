@@ -45,7 +45,7 @@ pub mod value {
 
 /// resource
 pub mod resource {
-    use std::path::{Path, PathBuf};
+    use std::{collections::HashMap, path::PathBuf};
 
     pub fn assets_dir() -> PathBuf {
         PathBuf::from("assets")
@@ -64,31 +64,24 @@ pub mod resource {
     }
 
     pub fn write_assets() -> anyhow::Result<()> {
-        fn write_file<C: AsRef<[u8]>>(path: impl AsRef<Path>, contents: C) -> anyhow::Result<()> {
-            let path = path.as_ref();
+        fn write_file(path: PathBuf, contents: Vec<u8>) -> anyhow::Result<()> {
             if !path.exists() {
                 std::fs::write(path, contents)?;
             }
             Ok(())
         }
 
-        let assets_dir = assets_dir();
-        std::fs::create_dir_all(assets_dir)?;
-        write_file(
-            generation_failed_path(),
-            include_bytes!("../resource/generation_failed.png"),
-        )?;
+        let resources: HashMap<PathBuf, String> =
+            serde_json::from_str(include_str!(concat!(env!("OUT_DIR"), "/resource.json")))?;
 
-        let tags_dir = tags_dir();
-        std::fs::create_dir_all(&tags_dir)?;
-        write_file(
-            tags_dir.join("cadaeic_tags.txt"),
-            include_str!("../resource/tags/cadaeic_tags.txt"),
-        )?;
-        write_file(
-            danbooru_sanitized_path(),
-            include_str!("../resource/tags/danbooru_sanitized.txt"),
-        )?;
+        let assets_dir = assets_dir();
+        for (path, contents) in resources {
+            let path = assets_dir.join(path);
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            write_file(path, hex::decode(&contents)?)?;
+        }
 
         Ok(())
     }
