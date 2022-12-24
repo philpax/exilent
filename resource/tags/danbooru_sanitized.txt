@@ -24,8 +24,6 @@
 6+boys
 6+girls
 6+others
-39
-69
 2006
 2007
 2008
@@ -53,7 +51,6 @@
 :/
 :<
 :>
-:>=
 :d
 :i
 :o
@@ -145,7 +142,6 @@ alien
 all_fours
 alley
 alpaca_ears
-alpha_signature
 alternate_color
 alternate_costume
 alternate_eye_color
@@ -155,7 +151,6 @@ alternate_hair_length
 alternate_hairstyle
 alternate_headwear
 alternate_legwear
-alternate_pectoral_size
 alternate_skin_color
 alternate_universe
 alternate_weapon
@@ -170,7 +165,6 @@ amestris_military_uniform
 ammunition
 ammunition_belt
 ammunition_pouch
-amputee
 amulet
 anchor
 anchor_choker
@@ -254,7 +248,6 @@ aqua_skirt
 aqua_theme
 aquarium
 ar-15
-arabian_clothes
 arachne
 aran_sweater
 arch
@@ -308,8 +301,6 @@ arrow_through_heart
 art_brush
 art_nouveau
 arthropod_girl
-artist_logo
-artist_name
 ascot
 ashford_academy_uniform
 asian
@@ -319,7 +310,6 @@ assisted_exposure
 astronaut
 asymmetrical_bangs
 asymmetrical_clothes
-asymmetrical_docking
 asymmetrical_footwear
 asymmetrical_gloves
 asymmetrical_hair
@@ -338,16 +328,12 @@ autumn
 autumn_leaves
 aviator_sunglasses
 axe
-baby
-baby_bottle
-babydoll
 back
 back-seamed_legwear
 back-to-back
 back_bow
 back_cutout
 back_tattoo
-background_text
 backless_dress
 backless_leotard
 backless_outfit
@@ -513,7 +499,6 @@ between_fingers
 between_legs
 between_pectorals
 between_toes
-bib
 biceps
 bicorne
 bicycle
@@ -732,7 +717,6 @@ body_hair
 body_markings
 body_writing
 bodypaint
-bodystocking
 bodysuit
 bodysuit_under_clothes
 bokeh
@@ -780,11 +764,7 @@ bowtie
 box
 box_tie
 boxcutter
-boxer_briefs
-boxers
 boxing_gloves
-boy_sandwich
-bra
 bracelet
 bracer
 braid
@@ -897,16 +877,11 @@ burger
 burn_scar
 burning
 burnt_clothes
-buruma
-buruma_aside
-buruma_pull
 bus
 bus_stop
 bush
 business_suit
 butler
-butt_crack
-butt_plug
 butter
 butterfly
 butterfly_hair_ornament
@@ -944,7 +919,6 @@ camouflage_jacket
 camouflage_pants
 campfire
 can
-can't_be_this_cute
 candle
 candlelight
 candlestand
@@ -995,7 +969,6 @@ cat_girl
 cat_hair_ornament
 cat_hat
 cat_hood
-cat_lingerie
 cat_mask
 cat_on_head
 cat_paws
@@ -1007,7 +980,6 @@ caterpillar_tracks
 catholic
 catsuit
 cattail
-caught
 caustics
 caution_tape
 cave
@@ -1037,11 +1009,9 @@ champion_uniform
 chandelier
 chaps
 character_doll
-character_name
 character_print
 character_profile
 character_sheet
-character_signature
 chart
 chasing
 chat_log
@@ -1081,7 +1051,6 @@ chest_hair
 chest_harness
 chest_jewel
 chest_of_drawers
-chest_tattoo
 chestnut_mouth
 chewing
 chewing_gum
@@ -1098,7 +1067,6 @@ chin_stroking
 china_dress
 chinese_clothes
 chinese_new_year
-chinese_text
 chinese_zodiac
 chips
 chocolate
@@ -1226,7 +1194,6 @@ condensation_trail
 confession
 confetti
 confused
-consensual_tentacles
 constellation
 constellation_print
 constricted_pupils
@@ -1331,7 +1298,6 @@ cross
 cross-laced_clothes
 cross-laced_footwear
 cross-laced_legwear
-cross-section
 cross_choker
 cross_earrings
 cross_hair_ornament
@@ -1442,14 +1408,12 @@ detached_hair
 detached_sleeves
 detached_wings
 detective
-deviantart_username
 diadem
 diagonal-striped_bow
 diagonal-striped_neckwear
 diagonal_bangs
 diagonal_stripes
 diamond-shaped_pupils
-diaper
 dice
 dice_hair_ornament
 different_reflection
@@ -1636,8 +1600,6 @@ energy_drink
 energy_gun
 energy_sword
 energy_wings
-english_text
-engrish_text
 enmaided
 enpera
 entangled
@@ -1688,13 +1650,11 @@ eyewear_on_head
 eyewear_on_headwear
 face
 face-to-face
-facebook_username
 faceless
 faceless_female
 faceless_male
 facepaint
 facepalm
-facial
 facial_hair
 facial_mark
 facial_tattoo
@@ -1754,7 +1714,6 @@ feet_together
 feet_up
 female_pov
 female_service_cap
-femdom
 fence
 ferret
 ferris_wheel
@@ -1774,7 +1733,6 @@ fine_art_parody
 fine_fabric_emphasis
 finger_biting
 finger_gun
-finger_in_another's_mouth
 finger_in_mouth
 finger_on_trigger
 finger_to_cheek
@@ -1826,8 +1784,6 @@ flashing
 flashlight
 flask
 flat_cap
-flat_chest
-flat_chest_grab
 flat_color
 flats
 fleeing
@@ -1922,8 +1878,6 @@ freediving
 french_braid
 french_flag
 french_fries
-french_kiss
-french_text
 fried_egg
 friends
 frilled_apron
@@ -1953,7 +1907,6 @@ frog
 frog_girl
 frog_hair_ornament
 frog_print
-frogtie
 from_above
 from_behind
 from_below
@@ -1961,20 +1914,17 @@ from_outside
 from_side
 front-tie_top
 front_ponytail
-frottage
 frown
 frozen
 fruit
 fruit_on_head
 frying_pan
-fucked_silly
 full-body_tattoo
 full-face_blush
 full-length_zipper
 full_armor
 full_body
 full_moon
-full_nelson
 fume
 fundoshi
 fur
@@ -2011,7 +1961,6 @@ furry_with_furry
 furry_with_non-furry
 fusion
 futon
-g-string
 gaijin_4koma
 gakuran
 galaxy
@@ -2037,7 +1986,6 @@ gem
 genderswap
 german_clothes
 german_flag
-german_text
 germany
 gerudo
 gesture
@@ -2053,7 +2001,6 @@ gift_bag
 gift_box
 gills
 ginkgo_leaf
-girl_sandwich
 giving
 giving_up_the_ghost
 glaive
@@ -2087,7 +2034,6 @@ goggles_around_neck
 goggles_on_head
 goggles_on_headwear
 gohei
-gokkun
 gold
 gold_armor
 gold_chain
@@ -2210,12 +2156,8 @@ grimace
 grimoire
 grimoire_of_alice
 grin
-grinding
 groceries
 grocery_bag
-groin
-groin_tendon
-groping
 ground_vehicle
 group_hug
 group_name
@@ -2225,7 +2167,6 @@ guitar_case
 gun
 gun_to_head
 gunblade
-gusset
 gyaru
 gym
 gym_shirt
@@ -2518,12 +2459,10 @@ hikarizaka_private_high_school_uniform
 hikimayu
 hill
 hime_cut
-hip_bones
 hip_focus
 hip_vent
 hirschgeweih_antennas
 hishaku
-hitachi_magic_wand
 hitodama
 hitting
 hogwarts_school_uniform
@@ -2714,11 +2653,6 @@ imminent_kiss
 impaled
 imperial_japanese_army
 implied_yuri
-impossible_bodysuit
-impossible_clothes
-impossible_dress
-impossible_leotard
-impossible_shirt
 in_box
 in_bucket
 in_container
@@ -2761,14 +2695,11 @@ invisible_chair
 iphone
 ipod
 iron_cross
-irrumatio
 is_that_so
 island
 italian_flag
-italian_text
 ivy
 jack-o'-lantern
-jack-o'_challenge
 jackal_ears
 jacket
 jacket_around_waist
@@ -2880,7 +2811,6 @@ kogal
 koi
 konohagakure_symbol
 korean_clothes
-korean_text
 kotatsu
 kote
 kotoyoro
@@ -2923,8 +2853,6 @@ large_pectorals
 large_tail
 large_wings
 laser
-latex
-latex_bodysuit
 latex_gloves
 latin_cross
 laughing
@@ -3028,7 +2956,6 @@ limited_palette
 linea_alba
 lineart
 lineup
-lingerie
 linked_piercing
 lion
 lion_boy
@@ -3056,8 +2983,6 @@ locker
 locker_room
 log
 logo
-logo_parody
-loincloth
 lolita_fashion
 lolita_hairband
 lollipop
@@ -3093,7 +3018,6 @@ looking_back
 looking_down
 looking_outside
 looking_over_eyewear
-looking_through_legs
 looking_to_the_side
 looking_up
 loose_belt
@@ -3102,8 +3026,6 @@ loose_clothes
 loose_necktie
 loose_shirt
 loose_socks
-lotion
-lotion_bottle
 lotus
 lounge_chair
 loungewear
@@ -3120,10 +3042,8 @@ lower_teeth
 lowleg
 lowleg_pants
 lowleg_skirt
-lube
 luna_nova_school_uniform
 lying
-lying_on_person
 lyrics
 m4_carbine
 m16
@@ -3135,7 +3055,6 @@ machine
 machine_gun
 machinery
 madoka_runes
-maebari
 magatama
 magatama_earrings
 magatama_necklace
@@ -3157,7 +3076,6 @@ makeup
 makizushi
 male_focus
 male_hand
-male_playboy_bunny
 male_swimwear
 mallet
 mamemaki
@@ -3185,7 +3103,6 @@ master_sword
 masu
 mat
 matching_outfit
-mating_press
 mature_female
 mature_male
 meat
@@ -3245,7 +3162,6 @@ military_vehicle
 milk
 milk_bottle
 milk_carton
-milking_machine
 milky_way
 mimikaki
 mind_control
@@ -3322,7 +3238,6 @@ mouse_ears
 mouse_girl
 mouse_tail
 mouth
-mouth_drool
 mouth_hold
 mouth_mask
 mouth_pull
@@ -3405,7 +3320,6 @@ napkin
 narrow_waist
 narrowed_eyes
 national_shin_ooshima_school_uniform
-native_american
 natsuiro_egao_de_1_2_jump!
 nature
 naval_uniform
@@ -3474,10 +3388,6 @@ nurse
 nurse_cap
 nyan
 o3o
-o-ring
-o-ring_bottom
-o-ring_choker
-o-ring_top
 o_o
 obi
 obiage
@@ -3538,7 +3448,6 @@ onbashira
 one-eyed
 one-hour_drawing_challenge
 one-piece_tan
-one-piece_thong
 one_eye_closed
 one_eye_covered
 one_knee
@@ -3565,7 +3474,6 @@ open_coat
 open_collar
 open_door
 open_dress
-open_fly
 open_hand
 open_hands
 open_hoodie
@@ -3659,7 +3567,6 @@ owl_ears
 own_hands_clasped
 own_hands_together
 p90
-pacifier
 paddle
 padlock
 page_number
@@ -3713,13 +3620,10 @@ party_hat
 party_popper
 pasta
 pastel_colors
-pasties
 pastry
 patch
 patchwork_skin
 path
-patreon_logo
-patreon_username
 patterned
 patterned_background
 patterned_clothing
@@ -3736,7 +3640,6 @@ peach
 peaked_cap
 pearl_bracelet
 pearl_necklace
-pectoral_grab
 pectoral_press
 pectorals
 pegasus
@@ -3783,7 +3686,6 @@ picture_frame
 pie
 pier
 piercing
-piercing_bunny
 pig
 pig_ears
 pigeon
@@ -3871,7 +3773,6 @@ pistol
 pith_helmet
 pixel_art
 pixelated
-pixiv_id
 pizza
 pizza_slice
 plaid
@@ -3903,8 +3804,6 @@ platform_boots
 platform_footwear
 platform_heels
 platinum_blonde_hair
-playboy_bunny
-playboy_bunny_leotard
 player_2
 playing
 playing_card
@@ -4006,7 +3905,6 @@ prayer_beads
 praying
 prehensile_hair
 prehensile_tail
-presenting
 priest
 princess
 princess_carry
@@ -4027,10 +3925,8 @@ print_skirt
 prison
 prison_clothes
 product_placement
-profanity
 profile
 projected_inset
-prone_bone
 propeller
 propeller_hair_ornament
 prosthesis
@@ -4148,7 +4044,6 @@ ranguage
 rapier
 rat
 ray_gun
-reach-around
 reaching
 reaching_out
 reading
@@ -4244,11 +4139,7 @@ restaurant
 restrained
 restroom
 retro_artstyle
-reverse_bunnysuit
 reverse_grip
-reverse_outfit
-reverse_suspended_congress
-reverse_trap
 revolver
 ribbon
 ribbon-trimmed_clothes
@@ -4289,8 +4180,6 @@ rod_of_remorse
 role_reversal
 roller_skates
 rolling_eyes
-romaji_text
-roman_numeral
 rooftop
 room
 rooster
@@ -4316,7 +4205,6 @@ ruins
 ruler
 runes
 running
-russian_text
 ryona
 ryouou_school_uniform
 sack
@@ -4328,7 +4216,6 @@ sailor_collar
 sailor_collar_lift
 sailor_dress
 sailor_hat
-sailor_moon_redraw_challenge
 sailor_senshi
 sailor_senshi_uniform
 sailor_shirt
@@ -4353,7 +4240,6 @@ sand_castle
 sand_sculpture
 sandals
 sandwich
-sandwiched
 sangvis_ferri
 sanshoku_dango
 santa_boots
@@ -4496,7 +4382,6 @@ shiny_skin
 ship
 shirt
 shirt_grab
-shirt_in_mouth
 shirt_lift
 shirt_pull
 shirt_tucked_in
@@ -4586,7 +4471,6 @@ sideways_mouth
 sig_sauer
 sigh
 sign
-signature
 silent_comic
 silhouette
 silk
@@ -4594,7 +4478,6 @@ silver_dress
 silver_hair
 silver_trim
 simple_background
-simplified_chinese_text
 singing
 single_bare_shoulder
 single_boot
@@ -4805,7 +4688,6 @@ spine
 spinning
 spirit
 spit_take
-spitroast
 spitting
 splashing
 splatter
@@ -4827,7 +4709,6 @@ spoken_squiggle
 spoken_sweatdrop
 sponge
 spoon
-spooning
 sport
 sportswear
 spot_color
@@ -4838,7 +4719,6 @@ spread_fingers
 spread_legs
 spread_toes
 spread_wings
-spreader_bar
 spring_onion
 square_4koma
 squatting
@@ -5004,7 +4884,6 @@ sunset
 super_crown
 super_robot
 super_saiyan
-super_saiyan_1
 super_soaker
 superhero
 suppressor
@@ -5017,11 +4896,9 @@ surprised
 surprised_arms
 surreal
 sushi
-suspended_congress
 suspender_shorts
 suspender_skirt
 suspenders
-suspension
 sweat
 sweatband
 sweatdrop
@@ -5050,7 +4927,6 @@ sword_over_shoulder
 symbol
 symbol-shaped_pupils
 symbol_in_eye
-symmetrical_docking
 symmetry
 syringe
 syrup
@@ -5128,7 +5004,6 @@ team_9
 team_rocket
 team_rocket_uniform
 team_skull
-teamwork
 teapot
 teardrop
 tearing_clothes
@@ -5157,16 +5032,10 @@ tent
 tentacle_hair
 tentacle_pit
 tentacles
-tentacles_on_male
-tentacles_under_clothes
-tented_shirt
 teruterubouzu
 test_plugsuit
 test_tube
-text-only_page
-text_focus
 texture
-thai_text
 thank_you
 the_pose
 theft
@@ -5176,8 +5045,6 @@ thermos
 thick_eyebrows
 thinking
 third_eye
-thong
-thong_leotard
 thorns
 thought_bubble
 thread
@@ -5219,8 +5086,6 @@ tire
 tired
 tissue
 tissue_box
-title
-title_parody
 toast
 toast_in_mouth
 toe-point
@@ -5255,7 +5120,6 @@ tools
 tooth
 tooth_necklace
 toothbrush
-top-down_bottom-up
 top_hat
 topknot
 torch
@@ -5277,7 +5141,6 @@ torn_shirt
 torn_shorts
 torn_skirt
 torn_sleeves
-torogao
 torpedo
 torpedo_launcher
 torpedo_tubes
@@ -5296,7 +5159,6 @@ track_pants
 track_suit
 track_uniform
 trading_card
-traditional_chinese_text
 traditional_clothes
 traditional_media
 traffic_cone
@@ -5306,8 +5168,6 @@ train_interior
 train_station
 trait_connection
 transformation
-transparent
-transparent_background
 transparent_umbrella
 transparent_wings
 trash_bag
@@ -5328,7 +5188,6 @@ triangle
 triangle_earrings
 triangle_mouth
 triangular_headpiece
-tribadism
 tribal
 trick_or_treat
 tricorne
@@ -5352,7 +5211,6 @@ tube_dress
 tube_top
 tulip
 tulip_hat
-tumblr_username
 tunic
 turban
 turn_pale
@@ -5374,8 +5232,6 @@ twins
 twintails
 twisted_torso
 twitching
-twitter_logo
-twitter_username
 two-finger_salute
 two-handed
 two-sided_cape
@@ -5529,16 +5385,13 @@ waist_cape
 waistcoat
 waiter
 waitress
-wakamezake
 waking_up
 wakizashi
-walk-in
 walkie-talkie
 walking
 walking_on_liquid
 wall
 wall_clock
-wall_of_text
 wallet
 walther
 wand
@@ -5576,7 +5429,6 @@ wedding_band
 wedding_dress
 wedding_ring
 wedgie
-weibo_username
 weighing_scale
 weight_conscious
 weightlifting
@@ -5820,7 +5672,6 @@ yin_yang_orb
 yoga_pants
 yokozuwari
 yordle
-you're_doing_it_wrong
 youkai
 younger
 youtube
