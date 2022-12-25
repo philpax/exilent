@@ -54,7 +54,7 @@ pub async fn to_exilent(
     mci.create(
         http,
         &format!(
-            "Generating with Exilent{}...",
+            "Generating with Exilent{} (waiting for start)...",
             to_exilent_channel_id
                 .map(|c| format!(" in {}", c.mention()))
                 .unwrap_or_default()

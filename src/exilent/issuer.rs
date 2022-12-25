@@ -25,57 +25,70 @@ pub async fn generation_task(
     (prompt, negative_prompt): (&str, Option<&str>),
     image_generation: Option<store::ImageGeneration>,
 ) -> anyhow::Result<()> {
+    // How many seconds to subtract from the time of job issuance to accommodate for
+    // early starts
+    const START_TIME_SLACK: i64 = 2;
+
     // generate and update progress
     let mut max_progress_factor = 0.0;
+
+    let start_time = chrono::Local::now() - chrono::Duration::seconds(START_TIME_SLACK);
+
     loop {
         let progress = client.progress().await?;
-        let image_bytes = progress
-            .current_image
-            .as_ref()
-            .map(|i| {
-                util::encode_image_to_png_bytes(i.resize(
-                    ((i.width() as f32) * Configuration::get().progress.scale_factor) as u32,
-                    ((i.height() as f32) * Configuration::get().progress.scale_factor) as u32,
-                    image::imageops::FilterType::Nearest,
-                ))
-            })
-            .transpose()?;
 
-        max_progress_factor = progress.progress_factor.max(max_progress_factor);
+        // Only update the message if the ongoing job was started after
+        // this job was issued
+        if progress.job_timestamp.unwrap_or(start_time) >= start_time {
+            let image_bytes = progress
+                .current_image
+                .as_ref()
+                .map(|i| {
+                    util::encode_image_to_png_bytes(i.resize(
+                        ((i.width() as f32) * Configuration::get().progress.scale_factor) as u32,
+                        ((i.height() as f32) * Configuration::get().progress.scale_factor) as u32,
+                        image::imageops::FilterType::Nearest,
+                    ))
+                })
+                .transpose()?;
 
-        interaction
-            .get_interaction_message(http)
-            .await?
-            .edit(http, |m| {
-                m.content(format!(
-                    "`{}`{}{}: {:.02}% complete. ({:.02} seconds remaining)",
-                    prompt,
-                    negative_prompt
-                        .filter(|s| !s.is_empty())
-                        .map(|s| format!(" - `{s}`"))
-                        .unwrap_or_default(),
-                    image_generation
-                        .as_ref()
-                        .map(|ig| format!(" for {}", ig.init_url))
-                        .unwrap_or_default(),
-                    max_progress_factor * 100.0,
-                    progress.eta_seconds
-                ));
+            max_progress_factor = progress.progress_factor.max(max_progress_factor);
 
-                if let Some(image_bytes) = &image_bytes {
-                    if let Some(a) = m.0.get_mut("attachments").and_then(|e| e.as_array_mut()) {
-                        a.clear();
+            interaction
+                .get_interaction_message(http)
+                .await?
+                .edit(http, |m| {
+                    m.content(format!(
+                        "`{}`{}{}: {:.02}% complete. ({:.02} seconds remaining)",
+                        prompt,
+                        negative_prompt
+                            .filter(|s| !s.is_empty())
+                            .map(|s| format!(" - `{s}`"))
+                            .unwrap_or_default(),
+                        image_generation
+                            .as_ref()
+                            .map(|ig| format!(" for {}", ig.init_url))
+                            .unwrap_or_default(),
+                        max_progress_factor * 100.0,
+                        progress.eta_seconds
+                    ));
+
+                    if let Some(image_bytes) = &image_bytes {
+                        if let Some(a) = m.0.get_mut("attachments").and_then(|e| e.as_array_mut()) {
+                            a.clear();
+                        }
+                        m.attachment((image_bytes.as_slice(), "progress.png"));
                     }
-                    m.attachment((image_bytes.as_slice(), "progress.png"));
-                }
 
-                m
-            })
-            .await?;
+                    m
+                })
+                .await?;
+        }
 
-        if progress.is_finished() || task.is_finished() {
+        if task.is_finished() {
             break;
         }
+
         tokio::time::sleep(Duration::from_millis(
             Configuration::get().progress.update_ms,
         ))

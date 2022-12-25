@@ -1651,7 +1651,7 @@ dependencies = [
 [[package]]
 name = "stable-diffusion-a1111-webui-client"
 version = "0.1.0"
-source = "git+https://github.com/philpax/stable-diffusion-a1111-webui-client.git?rev=9a38f04c2327ba82039a3c715175805cb73cae16#9a38f04c2327ba82039a3c715175805cb73cae16"
+source = "git+https://github.com/philpax/stable-diffusion-a1111-webui-client.git?branch=develop#4389bafdad0124ec88116d3cab3e87c1513e3445"
 dependencies = [
  "base64",
  "chrono",

@@ -385,7 +385,7 @@ pub async fn paint(
         .edit(
             http,
             &format!(
-                "`{}`{}: Generating...",
+                "`{}`{}: Generating (waiting for start)...",
                 &base.prompt,
                 base.negative_prompt
                     .as_ref()
@@ -461,7 +461,7 @@ pub async fn paintover(
         .edit(
             http,
             &format!(
-                "`{}`{}: Painting over {}...",
+                "`{}`{}: Painting over {} (waiting for start)...",
                 &base.prompt,
                 base.negative_prompt
                     .as_deref()

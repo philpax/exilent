@@ -249,7 +249,10 @@ pub async fn interrogate_generate(
             .and_then(|g| util::find_model_by_hash(models, &g.model_hash).map(|t| t.1));
 
         interaction
-            .edit(http, &format!("`{prompt}`: Generating..."))
+            .edit(
+                http,
+                &format!("`{prompt}`: Generating (waiting for start)..."),
+            )
             .await?;
 
         let mut base = sd::BaseGenerationRequest {
@@ -457,7 +460,7 @@ async fn retry_impl(
         .edit(
             http,
             &format!(
-                "`{}`{}: Generating retry...",
+                "`{}`{}: Generating retry (waiting for start)...",
                 request.base().prompt,
                 request
                     .base()
