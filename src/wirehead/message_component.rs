@@ -74,10 +74,13 @@ pub async fn to_exilent(
 
     let (prompt, negative_prompt) = (base.prompt.clone(), base.negative_prompt.clone());
     exilent::issuer::generation_task(
-        client.generate_from_text(&sd::TextToImageGenerationRequest {
-            base,
-            ..Default::default()
-        })?,
+        client,
+        tokio::task::spawn(
+            client.generate_from_text(&sd::TextToImageGenerationRequest {
+                base,
+                ..Default::default()
+            }),
+        ),
         models,
         store,
         http,

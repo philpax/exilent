@@ -15,7 +15,8 @@ use std::time::Duration;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn generation_task(
-    task: sd::GenerationTask,
+    client: &sd::Client,
+    task: tokio::task::JoinHandle<sd::Result<sd::GenerationResult>>,
     models: &[sd::Model],
     store: &Store,
     http: &Http,
@@ -25,8 +26,9 @@ pub async fn generation_task(
     image_generation: Option<store::ImageGeneration>,
 ) -> anyhow::Result<()> {
     // generate and update progress
+    let mut max_progress_factor = 0.0;
     loop {
-        let progress = task.progress().await?;
+        let progress = client.progress().await?;
         let image_bytes = progress
             .current_image
             .as_ref()
@@ -38,6 +40,8 @@ pub async fn generation_task(
                 ))
             })
             .transpose()?;
+
+        max_progress_factor = progress.progress_factor.max(max_progress_factor);
 
         interaction
             .get_interaction_message(http)
@@ -54,7 +58,7 @@ pub async fn generation_task(
                         .as_ref()
                         .map(|ig| format!(" for {}", ig.init_url))
                         .unwrap_or_default(),
-                    progress.progress_factor * 100.0,
+                    max_progress_factor * 100.0,
                     progress.eta_seconds
                 ));
 
@@ -69,7 +73,7 @@ pub async fn generation_task(
             })
             .await?;
 
-        if progress.is_finished() {
+        if progress.is_finished() || task.is_finished() {
             break;
         }
         tokio::time::sleep(Duration::from_millis(
@@ -79,7 +83,7 @@ pub async fn generation_task(
     }
 
     // retrieve result
-    let result = task.block().await?;
+    let result = task.await??;
     let images = result
         .images
         .into_iter()

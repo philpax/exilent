@@ -138,8 +138,7 @@ async fn generate(
         .generate_from_text(&sd::TextToImageGenerationRequest {
             base,
             ..Default::default()
-        })?
-        .block()
+        })
         .await;
 
     let (image, seed) = match result {

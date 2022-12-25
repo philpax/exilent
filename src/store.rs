@@ -349,10 +349,15 @@ impl GenerationRequest {
         }
     }
 
-    pub fn generate(&self, client: &sd::Client) -> sd::Result<sd::GenerationTask> {
+    pub fn generate(
+        &self,
+        client: &sd::Client,
+    ) -> tokio::task::JoinHandle<sd::Result<sd::GenerationResult>> {
         match self {
-            GenerationRequest::Text(r) => client.generate_from_text(r),
-            GenerationRequest::Image(r) => client.generate_from_image_and_text(r),
+            GenerationRequest::Text(r) => tokio::task::spawn(client.generate_from_text(r)),
+            GenerationRequest::Image(r) => {
+                tokio::task::spawn(client.generate_from_image_and_text(r))
+            }
         }
     }
 }

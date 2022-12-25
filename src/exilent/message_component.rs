@@ -273,10 +273,13 @@ pub async fn interrogate_generate(
     };
     let prompt = base.prompt.clone();
     issuer::generation_task(
-        client.generate_from_text(&sd::TextToImageGenerationRequest {
-            base,
-            ..Default::default()
-        })?,
+        client,
+        tokio::task::spawn(
+            client.generate_from_text(&sd::TextToImageGenerationRequest {
+                base,
+                ..Default::default()
+            }),
+        ),
         models,
         store,
         http,
@@ -468,7 +471,8 @@ async fn retry_impl(
         .await?;
 
     issuer::generation_task(
-        request.generate(client)?,
+        client,
+        request.generate(client),
         models,
         store,
         http,

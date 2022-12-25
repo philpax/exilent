@@ -398,10 +398,13 @@ pub async fn paint(
 
     let (prompt, negative_prompt) = (base.prompt.clone(), base.negative_prompt.clone());
     issuer::generation_task(
-        client.generate_from_text(&sd::TextToImageGenerationRequest {
-            base,
-            ..Default::default()
-        })?,
+        client,
+        tokio::task::spawn(
+            client.generate_from_text(&sd::TextToImageGenerationRequest {
+                base,
+                ..Default::default()
+            }),
+        ),
         models,
         store,
         http,
@@ -472,12 +475,15 @@ pub async fn paintover(
 
     let (prompt, negative_prompt) = (base.prompt.clone(), base.negative_prompt.clone());
     issuer::generation_task(
-        client.generate_from_image_and_text(&sd::ImageToImageGenerationRequest {
-            base,
-            images: vec![image.clone()],
-            resize_mode: Some(resize_mode),
-            ..Default::default()
-        })?,
+        client,
+        tokio::task::spawn(client.generate_from_image_and_text(
+            &sd::ImageToImageGenerationRequest {
+                base,
+                images: vec![image.clone()],
+                resize_mode: Some(resize_mode),
+                ..Default::default()
+            },
+        )),
         models,
         store,
         http,
