@@ -6,6 +6,7 @@ use crate::{
     util::{self, DiscordInteraction},
 };
 use anyhow::Context;
+use itertools::Itertools;
 use serenity::{
     http::Http,
     model::prelude::{
@@ -280,9 +281,10 @@ async fn embeddings(
     })
     .await?;
     let texts = match client.embeddings().await {
-        Ok(embeddings) => {
-            util::generate_chunked_strings(embeddings.iter().map(|s| format!("`{s}`")), 1900)
-        }
+        Ok(embeddings) => util::generate_chunked_strings(
+            embeddings.all().map(|(s, _)| format!("`{s}`")).sorted(),
+            1900,
+        ),
         Err(err) => vec![format!("{err:?}")],
     };
     cmd.edit(http, texts.first().map(|s| s.as_str()).unwrap_or_default())
