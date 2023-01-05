@@ -230,7 +230,7 @@ impl Configuration {
     fn save(&self) -> anyhow::Result<()> {
         Ok(std::fs::write(
             Self::FILENAME,
-            &toml::to_string_pretty(self)?,
+            toml::to_string_pretty(self)?,
         )?)
     }
 }

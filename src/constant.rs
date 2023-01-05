@@ -80,7 +80,7 @@ pub mod resource {
             if let Some(parent) = path.parent() {
                 std::fs::create_dir_all(parent)?;
             }
-            write_file(path, hex::decode(&contents)?)?;
+            write_file(path, hex::decode(contents)?)?;
         }
 
         Ok(())
