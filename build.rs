@@ -14,7 +14,7 @@ fn main() {
         .map(|p| {
             (
                 p.strip_prefix("resource").unwrap().to_owned(),
-                hex::encode(&std::fs::read(p).unwrap()),
+                hex::encode(std::fs::read(p).unwrap()),
             )
         })
         .collect();
