@@ -98,15 +98,10 @@ pub async fn generation_task(
     // retrieve result
     let result = task.await??;
     let images = result
-        .images
+        .pngs
         .into_iter()
         .enumerate()
-        .map(|(idx, image)| {
-            Ok((
-                format!("image_{idx}.png"),
-                util::encode_image_to_png_bytes(image)?,
-            ))
-        })
+        .map(|(idx, image)| Ok((format!("image_{idx}.png"), image)))
         .collect::<anyhow::Result<Vec<_>>>()?;
 
     // send images

@@ -142,15 +142,17 @@ async fn generate(
         .await;
 
     let (image, seed) = match result {
-        Ok(result) => (result.images[0].clone(), result.info.seeds[0]),
+        Ok(result) => (result.pngs[0].clone(), result.info.seeds[0]),
         Err(err) => {
             println!("generation failed: {:?}", err);
             (
-                image::open(constant::resource::generation_failed_path())?,
+                util::encode_image_to_png_bytes(image::open(
+                    constant::resource::generation_failed_path(),
+                )?)?,
                 0,
             )
         }
     };
 
-    Ok((util::encode_image_to_png_bytes(image)?, seed))
+    Ok((image, seed))
 }
