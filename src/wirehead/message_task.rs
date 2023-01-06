@@ -2,12 +2,15 @@ use super::simulation::{AsPhenotype, FitnessStore, TextGenome};
 use crate::{command::OwnedBaseGenerationParameters, constant, custom_id as cid, util};
 use serenity::{
     http::Http,
-    model::prelude::{component::ButtonStyle, ChannelId},
+    model::prelude::{component::ButtonStyle, AttachmentType, ChannelId},
 };
 use stable_diffusion_a1111_webui_client as sd;
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
+use std::{
+    borrow::Cow,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -30,13 +33,20 @@ pub async fn task(
             break;
         }
 
+        fn to_attachment_type(value: &(Vec<u8>, i64)) -> AttachmentType {
+            AttachmentType::Bytes {
+                data: Cow::Borrowed(value.0.as_slice()),
+                filename: format!("output_{}.png", value.1),
+            }
+        }
+
         if let Ok(genome) = result_rx.try_recv() {
             let prompt = genome.as_text(&tags, prefix.as_deref(), suffix.as_deref());
-            let (image, seed) =
+            let images =
                 generate(&client, params.as_base_generation_request(), prompt.clone()).await?;
 
             channel_id
-                .send_files(http.as_ref(), [(image.as_slice(), "output.png")], |m| {
+                .send_files(http.as_ref(), images.iter().map(to_attachment_type), |m| {
                     m.content(format!(
                         "**Best result so far**{}",
                         if !hide_prompt {
@@ -49,9 +59,11 @@ pub async fn task(
                         if to_exilent_enabled {
                             c.create_action_row(|row| {
                                 row.create_button(|b| {
-                                    b.custom_id(cid::WireheadValue::ToExilent.to_id(genome, seed))
-                                        .label("To Exilent")
-                                        .style(ButtonStyle::Primary)
+                                    b.custom_id(
+                                        cid::WireheadValue::ToExilent.to_id(genome, images[0].1),
+                                    )
+                                    .label("To Exilent")
+                                    .style(ButtonStyle::Primary)
                                 })
                             })
                         } else {
@@ -65,15 +77,17 @@ pub async fn task(
         let pending_requests = std::mem::take(&mut *fitness_store.pending_requests.lock());
 
         for genome in pending_requests {
-            let (image, seed) = generate(
+            let images = generate(
                 &client,
                 params.as_base_generation_request(),
                 genome.as_text(&tags, prefix.as_deref(), suffix.as_deref()),
             )
             .await?;
 
+            let seed = images[0].1;
+
             channel_id
-                .send_files(http.as_ref(), [(image.as_slice(), "output.png")], |m| {
+                .send_files(http.as_ref(), images.iter().map(to_attachment_type), |m| {
                     m.components(|mc| {
                         mc.create_action_row(|row| {
                             let g = &genome;
@@ -123,11 +137,12 @@ pub async fn task(
     Ok(())
 }
 
+/// always guaranteed to return at least one image if it suceeds
 async fn generate(
     client: &sd::Client,
     base_generation_request: sd::BaseGenerationRequest,
     prompt: String,
-) -> anyhow::Result<(Vec<u8>, i64)> {
+) -> anyhow::Result<Vec<(Vec<u8>, i64)>> {
     let mut base = sd::BaseGenerationRequest {
         prompt,
         ..base_generation_request
@@ -141,18 +156,16 @@ async fn generate(
         })
         .await;
 
-    let (image, seed) = match result {
-        Ok(result) => (result.pngs[0].clone(), result.info.seeds[0]),
+    Ok(match result {
+        Ok(result) => result.pngs.into_iter().zip(result.info.seeds).collect(),
         Err(err) => {
             println!("generation failed: {:?}", err);
-            (
+            vec![(
                 util::encode_image_to_png_bytes(image::open(
                     constant::resource::generation_failed_path(),
                 )?)?,
                 0,
-            )
+            )]
         }
-    };
-
-    Ok((image, seed))
+    })
 }
