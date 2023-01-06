@@ -18,7 +18,6 @@ use serenity::{
     },
 };
 use stable_diffusion_a1111_webui_client as sd;
-use std::collections::HashMap;
 
 pub async fn register(http: &Http, models: &[sd::Model]) -> anyhow::Result<()> {
     Command::create_global_application_command(http, |command| {
@@ -299,45 +298,47 @@ async fn stats(
         http: &Http,
         guild_id: Option<GuildId>,
         id: UserId,
-    ) -> anyhow::Result<(UserId, String)> {
+    ) -> anyhow::Result<(String, UserId)> {
         let user = id.to_user(http).await?;
         let name = if let Some(guild_id) = guild_id {
             user.nick_in(http, guild_id).await
         } else {
             None
         };
-        Ok((id, name.unwrap_or(user.name)))
+        Ok((name.unwrap_or(user.name), id))
     }
 
-    let users = futures::future::join_all(
+    let mut users = futures::future::join_all(
         stats
             .keys()
             .map(|id| get_user_name(http, cmd.guild_id, *id)),
     )
     .await
     .into_iter()
-    .collect::<Result<HashMap<_, _>, _>>()?;
+    .collect::<Result<Vec<_>, _>>()?;
+    users.sort_by(|a, b| a.0.cmp(&b.0));
 
-    let message = stats
+    let message = users
         .into_iter()
-        .flat_map(|(user, counts)| {
-            std::iter::once(format!(
-                "**{}**",
-                users
-                    .get(&user)
-                    .map(|s| s.as_str())
-                    .unwrap_or("unknown user")
-            ))
-            .chain(counts.into_iter().map(|(model_hash, count)| {
-                format!(
-                    "- {}: {} generations",
-                    util::find_model_by_hash(models, &model_hash)
-                        .as_ref()
-                        .map(|m| m.1.name.clone())
-                        .unwrap_or_else(|| format!("unknown model [{}]", model_hash)),
-                    count
+        .flat_map(|(user_name, user_id)| {
+            std::iter::once(format!("**{user_name}**"))
+                .chain(
+                    stats
+                        .get(&user_id)
+                        .unwrap()
+                        .into_iter()
+                        .map(|(model_hash, count)| {
+                            format!(
+                                "- {}: {} generations",
+                                util::find_model_by_hash(models, &model_hash)
+                                    .as_ref()
+                                    .map(|m| m.1.name.clone())
+                                    .unwrap_or_else(|| format!("unknown model [{}]", model_hash)),
+                                count
+                            )
+                        }),
                 )
-            }))
+                .chain(std::iter::once(String::new()))
         })
         .collect::<Vec<String>>();
 
