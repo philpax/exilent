@@ -326,11 +326,11 @@ async fn stats(
                     stats
                         .get(&user_id)
                         .unwrap()
-                        .into_iter()
+                        .iter()
                         .map(|(model_hash, count)| {
                             format!(
                                 "- {}: {} generations",
-                                util::find_model_by_hash(models, &model_hash)
+                                util::find_model_by_hash(models, model_hash)
                                     .as_ref()
                                     .map(|m| m.1.name.clone())
                                     .unwrap_or_else(|| format!("unknown model [{}]", model_hash)),
