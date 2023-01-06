@@ -94,9 +94,10 @@ pub fn get_image_url(aci: &ApplicationCommandInteraction) -> anyhow::Result<Stri
         .context("expected an image to be passed in")
 }
 
-pub fn generate_chunked_strings(
-    strings: impl Iterator<Item = String>,
+pub fn generate_chunked_strings<'a>(
+    strings: impl Iterator<Item = &'a str>,
     threshold: usize,
+    separator: &str,
 ) -> Vec<String> {
     let mut texts = vec![String::new()];
     for string in strings {
@@ -105,12 +106,32 @@ pub fn generate_chunked_strings(
         }
         if let Some(last) = texts.last_mut() {
             if !last.is_empty() {
-                *last += ", ";
+                *last += separator;
             }
-            *last += &string;
+            *last += string;
         }
     }
     texts
+}
+
+/// assumes an interaction response has already been created
+pub async fn chunked_response(
+    http: &Http,
+    cmd: &dyn DiscordInteraction,
+    strings: impl Iterator<Item = &str>,
+    separator: &str,
+) -> anyhow::Result<()> {
+    let texts = generate_chunked_strings(strings, 1900, separator);
+    cmd.edit(http, texts.first().map(|s| s.as_str()).unwrap_or_default())
+        .await?;
+
+    for remainder in texts.iter().skip(1) {
+        cmd.channel_id()
+            .send_message(http, |msg| msg.content(remainder))
+            .await?;
+    }
+
+    Ok(())
 }
 
 pub fn find_model_by_hash(models: &[sd::Model], model_hash: &str) -> Option<(usize, sd::Model)> {

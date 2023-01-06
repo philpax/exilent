@@ -272,29 +272,16 @@ async fn embeddings(
     http: &Http,
     cmd: ApplicationCommandInteraction,
 ) -> anyhow::Result<()> {
-    cmd.create_interaction_response(http, |response| {
-        response
-            .kind(InteractionResponseType::ChannelMessageWithSource)
-            .interaction_response_data(|message| {
-                message.title("Embeddings").content("Processing...")
-            })
-    })
-    .await?;
-    let texts = match client.embeddings().await {
-        Ok(embeddings) => util::generate_chunked_strings(
-            embeddings.all().map(|(s, _)| format!("`{s}`")).sorted(),
-            1900,
-        ),
+    cmd.create(http, "Getting embeddings...").await?;
+    let embeddings = match client.embeddings().await {
+        Ok(embeddings) => embeddings
+            .all()
+            .map(|(s, _)| format!("`{s}`"))
+            .sorted()
+            .collect(),
         Err(err) => vec![format!("{err:?}")],
     };
-    cmd.edit(http, texts.first().map(|s| s.as_str()).unwrap_or_default())
-        .await?;
-
-    for remainder in texts.iter().skip(1) {
-        cmd.channel_id
-            .send_message(http, |msg| msg.content(remainder))
-            .await?;
-    }
+    util::chunked_response(http, &cmd, embeddings.iter().map(|s| s.as_str()), ", ").await?;
 
     Ok(())
 }
@@ -305,6 +292,8 @@ async fn stats(
     http: &Http,
     cmd: ApplicationCommandInteraction,
 ) -> anyhow::Result<()> {
+    cmd.create(http, "Getting stats...").await?;
+
     let stats = store.get_model_usage_counts()?;
     async fn get_user_name(
         http: &Http,
@@ -319,6 +308,7 @@ async fn stats(
         };
         Ok((id, name.unwrap_or(user.name)))
     }
+
     let users = futures::future::join_all(
         stats
             .keys()
@@ -349,11 +339,9 @@ async fn stats(
                 )
             }))
         })
-        .collect::<Vec<String>>()
-        .join("\n");
+        .collect::<Vec<String>>();
 
-    cmd.create(http, &message).await?;
-    Ok(())
+    util::chunked_response(http, &cmd, message.iter().map(|s| s.as_str()), "\n").await
 }
 
 pub async fn paint(
