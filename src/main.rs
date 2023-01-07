@@ -1,8 +1,10 @@
 use anyhow::Context as AnyhowContext;
+use futures::FutureExt;
 use parking_lot::Mutex;
 use serenity::{
     async_trait,
     client::{Context, EventHandler},
+    http::Http,
     model::{
         application::interaction::Interaction,
         prelude::{command::Command, *},
@@ -97,42 +99,89 @@ struct Handler {
     sessions: Mutex<HashMap<ChannelId, wirehead::Session>>,
 }
 
+async fn ready_handler(http: &Http, models: &[sd::Model]) -> anyhow::Result<()> {
+    let registered_commands = Command::get_global_application_commands(http).await?;
+    let registered_commands: HashSet<_> = registered_commands
+        .iter()
+        .map(|c| c.name.as_str())
+        .collect();
+
+    let our_commands: HashSet<_> = Configuration::get()
+        .commands
+        .all()
+        .iter()
+        .cloned()
+        .collect();
+
+    if registered_commands != our_commands {
+        // If the commands registered with Discord don't match the commands configured
+        // for this bot, reset them entirely.
+        Command::set_global_application_commands(http, |c| c.set_application_commands(vec![]))
+            .await?;
+    }
+
+    // TEMP HACK: Serenity 0.11.5 does not handle top-level error objects correctly,
+    // and will panic if it can't parse an error body. We catch the panic and lift it
+    // to an error.
+    //
+    // https://github.com/serenity-rs/serenity/pull/2256 fixes this.
+    async fn catch_async_panic(
+        f: impl std::future::Future<Output = anyhow::Result<()>>,
+    ) -> anyhow::Result<()> {
+        use std::panic;
+
+        let prev_hook = panic::take_hook();
+        panic::set_hook(Box::new(|_| {}));
+        let r = panic::AssertUnwindSafe(f)
+            .catch_unwind()
+            .await
+            .map_err(|e| {
+                anyhow::anyhow!(
+                    "{}",
+                    match e.downcast_ref::<String>() {
+                        Some(v) => v.as_str(),
+                        None => match e.downcast_ref::<&str>() {
+                            Some(v) => v,
+                            _ => "Unknown Source of Error",
+                        },
+                    }
+                )
+            })?;
+        panic::set_hook(prev_hook);
+        r
+    }
+    catch_async_panic(async {
+        exilent::command::register(http, models).await?;
+        wirehead::command::register(http, models).await?;
+
+        anyhow::Ok(())
+    })
+    .await?;
+
+    Ok(())
+}
+
 #[async_trait]
 impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, ready: Ready) {
-        println!("{} is connected!", ready.user.name);
+        println!("{} is connected; registering commands...", ready.user.name);
 
-        let registered_commands = Command::get_global_application_commands(&ctx.http)
-            .await
-            .unwrap();
-        let registered_commands: HashSet<_> = registered_commands
-            .iter()
-            .map(|c| c.name.as_str())
-            .collect();
-
-        let our_commands: HashSet<_> = Configuration::get()
-            .commands
-            .all()
-            .iter()
-            .cloned()
-            .collect();
-
-        if registered_commands != our_commands {
-            // If the commands registered with Discord don't match the commands configured
-            // for this bot, reset them entirely.
-            Command::set_global_application_commands(&ctx.http, |c| {
-                c.set_application_commands(vec![])
-            })
-            .await
-            .unwrap();
+        if let Err(err) = ready_handler(&ctx.http, &self.models).await {
+            println!("Error while registering commands: `{}`", err);
+            if err.to_string() == "expected object" {
+                println!();
+                println!(
+                    "Discord refused to register the commands due to the request being too long."
+                );
+                println!(
+                    "Consider hiding some models under `general.hide_models` in `config.toml` to fix this."
+                );
+                ctx.shard.shutdown_clean();
+                std::process::exit(1);
+            }
         }
 
-        exilent::command::register(&ctx.http, &self.models)
-            .await
-            .unwrap();
-        wirehead::command::register(&ctx.http, &self.models)
-            .await
-            .unwrap();
+        println!("{} is good to go!", ready.user.name);
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
