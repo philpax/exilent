@@ -53,6 +53,7 @@ pub struct Commands {
     pub exilent: String,
     pub png_info: String,
     pub wirehead: String,
+    pub presets: String,
 }
 impl Commands {
     pub fn all(&self) -> HashSet<&str> {
@@ -79,6 +80,7 @@ impl Default for Commands {
             exilent: "exilent".to_string(),
             png_info: "pnginfo".to_string(),
             wirehead: "wirehead".to_string(),
+            presets: "presets".to_string(),
         }
     }
 }

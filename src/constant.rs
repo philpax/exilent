@@ -13,6 +13,7 @@ pub mod value {
     pub const SAMPLER: &str = "sampler";
     pub const MODEL: &str = "model";
     pub const DENOISING_STRENGTH: &str = "denoising_strength";
+    pub const PRESET: &str = "preset";
 
     pub const WIDTH_HEIGHT: &str = "width_height";
     pub const GUIDANCE_SCALE_DENOISING_STRENGTH: &str = "guidance_scale_denoising_strength";
