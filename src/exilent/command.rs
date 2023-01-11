@@ -2,7 +2,7 @@ use super::issuer;
 use crate::{
     command,
     config::Configuration,
-    constant, custom_id as cid, store,
+    constant, store,
     util::{self, DiscordInteraction},
 };
 use anyhow::Context;
@@ -11,9 +11,7 @@ use serenity::{
     http::Http,
     model::prelude::{
         command::{Command, CommandOptionType},
-        interaction::{
-            application_command::ApplicationCommandInteraction, InteractionResponseType,
-        },
+        interaction::application_command::ApplicationCommandInteraction,
         *,
     },
 };
@@ -73,13 +71,6 @@ pub async fn register(http: &Http, models: &[sd::Model]) -> anyhow::Result<()> {
 
                 opt
             })
-    })
-    .await?;
-
-    Command::create_global_application_command(http, |command| {
-        command
-            .name(&Configuration::get().commands.paintagain)
-            .description("Re-run the last generation command with a modal of overrides")
     })
     .await?;
 
@@ -488,27 +479,6 @@ pub async fn paintover(
         }),
     )
     .await
-}
-
-pub async fn paintagain(
-    store: &store::Store,
-    http: &Http,
-    aci: ApplicationCommandInteraction,
-) -> anyhow::Result<()> {
-    let generation = store
-        .get_last_generation_for_user(aci.user.id)?
-        .context("no last generation for user")?;
-
-    aci.create_interaction_response(
-        http,
-        util::create_modal_interaction_response!(
-            "Paint Again",
-            cid::Generation::RetryWithOptionsResponse,
-            generation
-        ),
-    )
-    .await?;
-    Ok(())
 }
 
 pub async fn postprocess(
