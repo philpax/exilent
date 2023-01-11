@@ -12,30 +12,31 @@ pub mod message_component;
 mod message_task;
 pub mod simulation;
 
+#[derive(Clone)]
+pub struct GenerationParameters {
+    parameters: OwnedBaseGenerationParameters,
+    tags: Vec<String>,
+    prefix: Option<String>,
+    suffix: Option<String>,
+}
+
 pub struct Session {
     _simulation_thread: std::thread::JoinHandle<anyhow::Result<()>>,
     _message_task: tokio::task::JoinHandle<anyhow::Result<()>>,
     fitness_store: Arc<FitnessStore>,
     shutdown: Arc<AtomicBool>,
-    tags: Vec<String>,
-    prefix: Option<String>,
-    suffix: Option<String>,
     hide_prompt: bool,
-    parameters: OwnedBaseGenerationParameters,
+    generation_parameters: GenerationParameters,
     to_exilent_channel_id: Option<ChannelId>,
 }
 impl Session {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         http: Arc<Http>,
         channel_id: ChannelId,
         to_exilent_channel_id: Option<ChannelId>,
         client: Arc<sd::Client>,
-        parameters: OwnedBaseGenerationParameters,
-        tags: Vec<String>,
         hide_prompt: bool,
-        prefix: Option<String>,
-        suffix: Option<String>,
+        generation_parameters: GenerationParameters,
     ) -> anyhow::Result<Self> {
         let shutdown = Arc::new(AtomicBool::new(false));
         let fitness_store = Arc::new(FitnessStore::new(shutdown.clone()));
@@ -45,35 +46,29 @@ impl Session {
         let simulation_thread = std::thread::spawn({
             let fitness_store = fitness_store.clone();
             let shutdown = shutdown.clone();
-            let tags = tags.clone();
+            let tags = generation_parameters.tags.clone();
             move || simulation::thread(fitness_store, shutdown, tags, result_tx)
         });
 
-        let message_task = tokio::task::spawn(message_task::task(
+        let message_task = tokio::task::spawn(message_task::task(message_task::Parameters {
             http,
             channel_id,
-            to_exilent_channel_id.is_some(),
-            client,
-            parameters.clone(),
-            fitness_store.clone(),
-            shutdown.clone(),
-            tags.clone(),
-            prefix.clone(),
-            suffix.clone(),
+            shutdown: shutdown.clone(),
+            fitness_store: fitness_store.clone(),
             result_rx,
+            to_exilent_enabled: to_exilent_channel_id.is_some(),
             hide_prompt,
-        ));
+            client,
+            generation_parameters: generation_parameters.clone(),
+        }));
 
         Ok(Self {
             _simulation_thread: simulation_thread,
             _message_task: message_task,
             fitness_store,
             shutdown,
-            tags,
-            prefix,
-            suffix,
             hide_prompt,
-            parameters,
+            generation_parameters,
             to_exilent_channel_id,
         })
     }

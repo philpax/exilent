@@ -348,7 +348,7 @@ pub async fn run_and_report_error(
 ) {
     if let Err(err) = body.await {
         interaction
-            .create_or_edit(http, &format!("Error: {}", err.to_string()))
+            .create_or_edit(http, &format!("Error: {}", err))
             .await
             .unwrap();
     }

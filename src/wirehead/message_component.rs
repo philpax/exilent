@@ -1,4 +1,4 @@
-use super::{simulation::AsPhenotype, Session, TextGenome};
+use super::{simulation::AsPhenotype, GenerationParameters, Session, TextGenome};
 use crate::{
     custom_id as cid, exilent, store,
     util::{self, DiscordInteraction},
@@ -16,12 +16,10 @@ use serenity::{
 use stable_diffusion_a1111_webui_client as sd;
 use std::collections::HashMap;
 
-#[allow(clippy::too_many_arguments)]
 pub async fn to_exilent(
     sessions: &Mutex<HashMap<ChannelId, Session>>,
-    client: &sd::Client,
-    models: &[sd::Model],
     store: &store::Store,
+    (client, models): (&sd::Client, &[sd::Model]),
     http: &Http,
     mci: MessageComponentInteraction,
     genome: TextGenome,
@@ -35,18 +33,10 @@ pub async fn to_exilent(
             anyhow::bail!("There is no active Wirehead session.");
         };
 
-        let (tags, parameters, to_exilent_channel_id, prefix, suffix) = sessions
+        let (to_exilent_channel_id, parameters) = sessions
             .lock()
             .get(&mci.channel_id)
-            .map(|s| {
-                (
-                    s.tags.clone(),
-                    s.parameters.clone(),
-                    s.to_exilent_channel_id,
-                    s.prefix.clone(),
-                    s.suffix.clone(),
-                )
-            })
+            .map(|s| (s.to_exilent_channel_id, s.generation_parameters.clone()))
             .unwrap();
 
         mci.edit(
@@ -60,6 +50,13 @@ pub async fn to_exilent(
         )
         .await?;
 
+        let GenerationParameters {
+            parameters,
+            tags,
+            prefix,
+            suffix,
+        } = parameters;
+
         let base = {
             let mut base = sd::BaseGenerationRequest {
                 prompt: genome.as_text(&tags, prefix.as_deref(), suffix.as_deref()),
@@ -72,18 +69,16 @@ pub async fn to_exilent(
 
         let (prompt, negative_prompt) = (base.prompt.clone(), base.negative_prompt.clone());
         exilent::issuer::generation_task(
-            client,
+            (client, models),
             tokio::task::spawn(
                 client.generate_from_text(&sd::TextToImageGenerationRequest {
                     base,
                     ..Default::default()
                 }),
             ),
-            models,
             store,
             http,
-            &mci,
-            to_exilent_channel_id,
+            (&mci, to_exilent_channel_id),
             (&prompt, negative_prompt.as_deref()),
             None,
         )
@@ -107,7 +102,7 @@ pub async fn rate(
         };
 
         // this is a bit of a contortion but it's fine for now
-        let (tags, hide_prompt, to_exilent_enabled, prefix, suffix) = sessions
+        let (hide_prompt, to_exilent_enabled, params) = sessions
             .lock()
             .get(&mci.channel_id)
             .map(|session| {
@@ -123,14 +118,12 @@ pub async fn rate(
                     },
                 );
                 (
-                    session.tags.clone(),
                     session.hide_prompt,
                     session.to_exilent_channel_id.is_some(),
-                    session.prefix.clone(),
-                    session.suffix.clone(),
+                    session.generation_parameters.clone(),
                 )
             })
-            .unwrap_or_default();
+            .unwrap();
 
         mci.create_interaction_response(http, |m| {
             m.kind(InteractionResponseType::UpdateMessage)
@@ -140,7 +133,11 @@ pub async fn rate(
                         if !hide_prompt {
                             format!(
                                 "`{}` | ",
-                                genome.as_text(&tags, prefix.as_deref(), suffix.as_deref())
+                                genome.as_text(
+                                    &params.tags,
+                                    params.prefix.as_deref(),
+                                    params.suffix.as_deref()
+                                )
                             )
                         } else {
                             String::new()

@@ -159,7 +159,7 @@ async fn start(
         let suffix = util::get_value(&subcommand.options, constant::value::SUFFIX)
             .and_then(util::value_to_string);
 
-        let params = command::OwnedBaseGenerationParameters::load(
+        let parameters = command::OwnedBaseGenerationParameters::load(
             cmd.user.id,
             &subcommand.options,
             store,
@@ -180,20 +180,23 @@ async fn start(
                     ("Tags", Some(&tag_selection as &dyn Display)),
                     ("Prefix", display(&prefix)),
                     ("Suffix", display(&suffix)),
-                    ("Negative prompt", display(&params.negative_prompt)),
-                    ("Seed", display(&params.seed)),
-                    ("Count", display(&params.batch_count)),
-                    ("Width", display(&params.width)),
-                    ("Height", display(&params.height)),
-                    ("Guidance scale", display(&params.cfg_scale)),
-                    ("Denoising strength", display(&params.denoising_strength)),
-                    ("Steps", display(&params.steps)),
-                    ("Tiling", display(&params.tiling)),
-                    ("Restore faces", display(&params.restore_faces)),
-                    ("Sampler", display(&params.sampler)),
+                    ("Negative prompt", display(&parameters.negative_prompt)),
+                    ("Seed", display(&parameters.seed)),
+                    ("Count", display(&parameters.batch_count)),
+                    ("Width", display(&parameters.width)),
+                    ("Height", display(&parameters.height)),
+                    ("Guidance scale", display(&parameters.cfg_scale)),
+                    (
+                        "Denoising strength",
+                        display(&parameters.denoising_strength)
+                    ),
+                    ("Steps", display(&parameters.steps)),
+                    ("Tiling", display(&parameters.tiling)),
+                    ("Restore faces", display(&parameters.restore_faces)),
+                    ("Sampler", display(&parameters.sampler)),
                     (
                         "Model",
-                        display(&params.model.as_ref().map(|s| &s.name as &dyn Display))
+                        display(&parameters.model.as_ref().map(|s| &s.name as &dyn Display))
                     ),
                     (
                         "To Exilent channel",
@@ -224,11 +227,13 @@ async fn start(
                 cmd.channel_id,
                 to_exilent_channel_id,
                 client.clone(),
-                params,
-                tags,
                 hide_prompt,
-                prefix,
-                suffix,
+                super::GenerationParameters {
+                    parameters,
+                    tags,
+                    prefix,
+                    suffix,
+                },
             )?,
         );
         Ok(())

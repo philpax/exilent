@@ -284,7 +284,7 @@ async fn stats(
 ) {
     cmd.create(http, "Getting stats...").await.unwrap();
 
-    util::run_and_report_error(&cmd, &http, async {
+    util::run_and_report_error(&cmd, http, async {
         let stats = store.get_model_usage_counts()?;
         async fn get_user_name(
             http: &Http,
@@ -385,18 +385,16 @@ pub async fn paint(
 
         let (prompt, negative_prompt) = (base.prompt.clone(), base.negative_prompt.clone());
         issuer::generation_task(
-            client,
+            (client, models),
             tokio::task::spawn(
                 client.generate_from_text(&sd::TextToImageGenerationRequest {
                     base,
                     ..Default::default()
                 }),
             ),
-            models,
             store,
             http,
-            &aci,
-            None,
+            (&aci, None),
             (&prompt, negative_prompt.as_deref()),
             None,
         )
@@ -464,7 +462,7 @@ pub async fn paintover(
 
         let (prompt, negative_prompt) = (base.prompt.clone(), base.negative_prompt.clone());
         issuer::generation_task(
-            client,
+            (client, models),
             tokio::task::spawn(client.generate_from_image_and_text(
                 &sd::ImageToImageGenerationRequest {
                     base,
@@ -473,11 +471,9 @@ pub async fn paintover(
                     ..Default::default()
                 },
             )),
-            models,
             store,
             http,
-            &aci,
-            None,
+            (&aci, None),
             (&prompt, negative_prompt.as_deref()),
             Some(store::ImageGeneration {
                 init_image: image.clone(),

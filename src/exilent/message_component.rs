@@ -288,18 +288,16 @@ pub async fn interrogate_generate(
         };
         let prompt = base.prompt.clone();
         issuer::generation_task(
-            client,
+            (client, models),
             tokio::task::spawn(
                 client.generate_from_text(&sd::TextToImageGenerationRequest {
                     base,
                     ..Default::default()
                 }),
             ),
-            models,
             store,
             http,
-            interaction,
-            None,
+            (interaction, None),
             (prompt.as_str(), None),
             None,
         )
@@ -391,10 +389,8 @@ async fn reissue_response_impl(
         msi,
         id,
         Overrides::new(
-            prompt,
-            negative_prompt,
-            width,
-            height,
+            (prompt, negative_prompt),
+            (width, height),
             guidance_scale,
             None,
             seed,
@@ -494,13 +490,11 @@ async fn retry_impl(
             .await?;
 
         issuer::generation_task(
-            client,
+            (client, models),
             request.generate(client),
-            models,
             store,
             http,
-            interaction,
-            None,
+            (interaction, None),
             (
                 &request.base().prompt,
                 request.base().negative_prompt.as_deref(),
@@ -529,12 +523,9 @@ struct Overrides<'a> {
     paintover: bool,
 }
 impl<'a> Overrides<'a> {
-    #[allow(clippy::too_many_arguments)]
     fn new(
-        prompt: Option<&'a str>,
-        negative_prompt: Option<&'a str>,
-        width: Option<u32>,
-        height: Option<u32>,
+        (prompt, negative_prompt): (Option<&'a str>, Option<&'a str>),
+        (width, height): (Option<u32>, Option<u32>),
         guidance_scale: Option<f64>,
         steps: Option<usize>,
         seed: Option<Option<i64>>,

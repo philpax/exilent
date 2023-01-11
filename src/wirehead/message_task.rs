@@ -1,5 +1,8 @@
-use super::simulation::{AsPhenotype, FitnessStore, TextGenome};
-use crate::{command::OwnedBaseGenerationParameters, constant, custom_id as cid, util};
+use super::{
+    simulation::{AsPhenotype, FitnessStore, TextGenome},
+    GenerationParameters,
+};
+use crate::{constant, custom_id as cid, util};
 use serenity::{
     http::Http,
     model::prelude::{component::ButtonStyle, AttachmentType, ChannelId},
@@ -13,21 +16,42 @@ use std::{
     },
 };
 
-#[allow(clippy::too_many_arguments)]
-pub async fn task(
-    http: Arc<Http>,
-    channel_id: ChannelId,
-    to_exilent_enabled: bool,
-    client: Arc<sd::Client>,
-    params: OwnedBaseGenerationParameters,
-    fitness_store: Arc<FitnessStore>,
-    shutdown: Arc<AtomicBool>,
-    tags: Vec<String>,
-    prefix: Option<String>,
-    suffix: Option<String>,
-    result_rx: flume::Receiver<TextGenome>,
-    hide_prompt: bool,
-) -> anyhow::Result<()> {
+pub struct Parameters {
+    pub http: Arc<Http>,
+    pub channel_id: ChannelId,
+
+    pub shutdown: Arc<AtomicBool>,
+
+    pub fitness_store: Arc<FitnessStore>,
+    pub result_rx: flume::Receiver<TextGenome>,
+
+    pub to_exilent_enabled: bool,
+    pub hide_prompt: bool,
+
+    pub client: Arc<sd::Client>,
+    pub generation_parameters: GenerationParameters,
+}
+
+pub async fn task(parameters: Parameters) -> anyhow::Result<()> {
+    let Parameters {
+        http,
+        channel_id,
+        shutdown,
+        fitness_store,
+        result_rx,
+        to_exilent_enabled,
+        hide_prompt,
+        client,
+        generation_parameters,
+    } = parameters;
+
+    let GenerationParameters {
+        parameters,
+        tags,
+        prefix,
+        suffix,
+    } = generation_parameters;
+
     loop {
         if shutdown.load(Ordering::SeqCst) {
             break;
@@ -42,8 +66,12 @@ pub async fn task(
 
         if let Ok(genome) = result_rx.try_recv() {
             let prompt = genome.as_text(&tags, prefix.as_deref(), suffix.as_deref());
-            let images =
-                generate(&client, params.as_base_generation_request(), prompt.clone()).await?;
+            let images = generate(
+                &client,
+                parameters.as_base_generation_request(),
+                prompt.clone(),
+            )
+            .await?;
 
             channel_id
                 .send_files(http.as_ref(), images.iter().map(to_attachment_type), |m| {
@@ -79,7 +107,7 @@ pub async fn task(
         for genome in pending_requests {
             let images = generate(
                 &client,
-                params.as_base_generation_request(),
+                parameters.as_base_generation_request(),
                 genome.as_text(&tags, prefix.as_deref(), suffix.as_deref()),
             )
             .await?;

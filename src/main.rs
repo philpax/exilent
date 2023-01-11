@@ -302,9 +302,8 @@ impl EventHandler for Handler {
                         cid::WireheadValue::ToExilent => {
                             whmc::to_exilent(
                                 &self.sessions,
-                                &self.client,
-                                &self.models,
                                 &self.store,
+                                (&self.client, &self.models),
                                 http,
                                 mci,
                                 genome,

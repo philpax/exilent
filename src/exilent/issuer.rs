@@ -13,15 +13,12 @@ use serenity::{
 use stable_diffusion_a1111_webui_client as sd;
 use std::time::Duration;
 
-#[allow(clippy::too_many_arguments)]
 pub async fn generation_task(
-    client: &sd::Client,
+    (client, models): (&sd::Client, &[sd::Model]),
     task: tokio::task::JoinHandle<sd::Result<sd::GenerationResult>>,
-    models: &[sd::Model],
     store: &Store,
     http: &Http,
-    interaction: &dyn DiscordInteraction,
-    result_channel_override: Option<ChannelId>,
+    (interaction, result_channel_override): (&dyn DiscordInteraction, Option<ChannelId>),
     (prompt, negative_prompt): (&str, Option<&str>),
     image_generation: Option<store::ImageGeneration>,
 ) -> anyhow::Result<()> {
