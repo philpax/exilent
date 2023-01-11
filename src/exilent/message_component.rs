@@ -26,7 +26,7 @@ pub async fn retry(
     http: &Http,
     mci: &MessageComponentInteraction,
     id: i64,
-) -> anyhow::Result<()> {
+) {
     retry_impl(client, models, store, http, mci, id, Overrides::none(false)).await
 }
 
@@ -35,7 +35,7 @@ pub async fn retry_with_options(
     http: &Http,
     mci: &MessageComponentInteraction,
     id: i64,
-) -> anyhow::Result<()> {
+) {
     reissue_impl(
         store,
         http,
@@ -54,16 +54,11 @@ pub async fn retry_with_options_response(
     http: &Http,
     msi: &ModalSubmitInteraction,
     id: i64,
-) -> anyhow::Result<()> {
+) {
     reissue_response_impl(client, models, store, http, msi, id, false).await
 }
 
-pub async fn remix(
-    store: &store::Store,
-    http: &Http,
-    mci: &MessageComponentInteraction,
-    id: i64,
-) -> anyhow::Result<()> {
+pub async fn remix(store: &store::Store, http: &Http, mci: &MessageComponentInteraction, id: i64) {
     reissue_impl(
         store,
         http,
@@ -82,7 +77,7 @@ pub async fn remix_response(
     http: &Http,
     msi: &ModalSubmitInteraction,
     id: i64,
-) -> anyhow::Result<()> {
+) {
     reissue_response_impl(client, models, store, http, msi, id, true).await
 }
 
@@ -92,44 +87,48 @@ pub async fn upscale(
     http: &Http,
     mci: &MessageComponentInteraction,
     id: i64,
-) -> anyhow::Result<()> {
+) {
     mci.create(http, "Postprocess request received, processing...")
-        .await?;
+        .await
+        .unwrap();
 
-    let (image, url) = store
-        .get_generation(id)?
-        .map(|g| (g.image, g.image_url))
-        .context("generation not found")?;
+    util::run_and_report_error(mci, http, async {
+        let (image, url) = store
+            .get_generation(id)?
+            .map(|g| (g.image, g.image_url))
+            .context("generation not found")?;
 
-    let image = image::load_from_memory(&image)?;
-    let url = url.as_deref().unwrap_or("unknown");
+        let image = image::load_from_memory(&image)?;
+        let url = url.as_deref().unwrap_or("unknown");
 
-    mci.edit(http, &format!("Postprocessing {url}...")).await?;
+        mci.edit(http, &format!("Postprocessing {url}...")).await?;
 
-    let result = client
-        .postprocess(
-            &image,
-            &sd::PostprocessRequest {
-                resize_mode: sd::ResizeMode::Resize,
-                upscaler_1: sd::Upscaler::ESRGAN4x,
-                upscaler_2: sd::Upscaler::ESRGAN4x,
-                scale_factor: 2.0,
-                ..Default::default()
-            },
-        )
-        .await?;
+        let result = client
+            .postprocess(
+                &image,
+                &sd::PostprocessRequest {
+                    resize_mode: sd::ResizeMode::Resize,
+                    upscaler_1: sd::Upscaler::ESRGAN4x,
+                    upscaler_2: sd::Upscaler::ESRGAN4x,
+                    scale_factor: 2.0,
+                    ..Default::default()
+                },
+            )
+            .await?;
 
-    let bytes = util::encode_image_to_png_bytes(result)?;
+        let bytes = util::encode_image_to_png_bytes(result)?;
 
-    mci.get_interaction_message(http)
-        .await?
-        .edit(http, |m| {
-            m.content(format!("Postprocessing of <{url}> complete."))
-                .attachment((bytes.as_slice(), "postprocess.png"))
-        })
-        .await?;
+        mci.get_interaction_message(http)
+            .await?
+            .edit(http, |m| {
+                m.content(format!("Postprocessing of <{url}> complete."))
+                    .attachment((bytes.as_slice(), "postprocess.png"))
+            })
+            .await?;
 
-    Ok(())
+        Ok(())
+    })
+    .await;
 }
 
 pub async fn interrogate(
@@ -139,30 +138,34 @@ pub async fn interrogate(
     interaction: &dyn DiscordInteraction,
     id: i64,
     interrogator: sd::Interrogator,
-) -> anyhow::Result<()> {
+) {
     interaction
         .create(http, &format!("Interrogating with {interrogator}..."))
-        .await?;
+        .await
+        .unwrap();
 
-    let image = image::load_from_memory(
-        &store
-            .get_generation(id)?
-            .context("generation not found")?
-            .image,
-    )?;
+    util::run_and_report_error(interaction, http, async {
+        let image = image::load_from_memory(
+            &store
+                .get_generation(id)?
+                .context("generation not found")?
+                .image,
+        )?;
 
-    issuer::interrogate_task(
-        client,
-        store,
-        interaction,
-        http,
-        (
-            image,
-            store::InterrogationSource::GenerationId(id),
-            interrogator,
-        ),
-    )
-    .await
+        issuer::interrogate_task(
+            client,
+            store,
+            interaction,
+            http,
+            (
+                image,
+                store::InterrogationSource::GenerationId(id),
+                interrogator,
+            ),
+        )
+        .await
+    })
+    .await;
 }
 
 pub async fn interrogate_reinterrogate(
@@ -172,37 +175,43 @@ pub async fn interrogate_reinterrogate(
     interaction: &dyn DiscordInteraction,
     id: i64,
     interrogator: sd::Interrogator,
-) -> anyhow::Result<()> {
+) {
     interaction
         .create(http, &format!("Interrogating with {interrogator}..."))
-        .await?;
+        .await
+        .unwrap();
 
-    let interrogation = store
-        .get_interrogation(id)?
-        .context("interrogation not found")?;
+    util::run_and_report_error(interaction, http, async {
+        let interrogation = store
+            .get_interrogation(id)?
+            .context("interrogation not found")?;
 
-    let image = match interrogation.source {
-        store::InterrogationSource::GenerationId(id) => {
-            store
-                .get_generation(id)?
-                .context("generation not found")?
-                .image
-        }
-        store::InterrogationSource::Url(url) => reqwest::get(&url).await?.bytes().await?.to_vec(),
-    };
+        let image = match interrogation.source {
+            store::InterrogationSource::GenerationId(id) => {
+                store
+                    .get_generation(id)?
+                    .context("generation not found")?
+                    .image
+            }
+            store::InterrogationSource::Url(url) => {
+                reqwest::get(&url).await?.bytes().await?.to_vec()
+            }
+        };
 
-    issuer::interrogate_task(
-        client,
-        store,
-        interaction,
-        http,
-        (
-            image::load_from_memory(&image)?,
-            store::InterrogationSource::GenerationId(id),
-            interrogator,
-        ),
-    )
-    .await
+        issuer::interrogate_task(
+            client,
+            store,
+            interaction,
+            http,
+            (
+                image::load_from_memory(&image)?,
+                store::InterrogationSource::GenerationId(id),
+                interrogator,
+            ),
+        )
+        .await
+    })
+    .await;
 }
 
 pub async fn interrogate_generate(
@@ -212,86 +221,91 @@ pub async fn interrogate_generate(
     http: &Http,
     interaction: &dyn DiscordInteraction,
     id: i64,
-) -> anyhow::Result<()> {
+) {
     interaction
         .create(
             http,
             "Interrogation generation request received, processing...",
         )
-        .await?;
-    let interrogation = store
-        .get_interrogation(id)?
-        .context("no interrogation found")?;
+        .await
+        .unwrap();
 
-    // use last generation as default if available
-    let last_generation = store.get_last_generation_for_user(interaction.user().id)?;
-    let last_generation = last_generation.as_ref();
+    util::run_and_report_error(interaction, http, async {
+        let interrogation = store
+            .get_interrogation(id)?
+            .context("no interrogation found")?;
 
-    let base = {
-        // always applied
-        let prompt = interrogation.result;
-        let prompt = if let sd::Interrogator::DeepDanbooru = interrogation.interrogator {
-            let mut components: Vec<_> = prompt.split(", ").collect();
-            components.shuffle(&mut rand::thread_rng());
-            components.join(", ")
-        } else {
-            prompt
-        };
+        // use last generation as default if available
+        let last_generation = store.get_last_generation_for_user(interaction.user().id)?;
+        let last_generation = last_generation.as_ref();
 
-        let width = last_generation.map(|g| g.width);
-        let height = last_generation.map(|g| g.height);
-        let cfg_scale = last_generation.map(|g| g.cfg_scale);
-        let steps = last_generation.map(|g| g.steps);
-        let tiling = last_generation.map(|g| g.tiling);
-        let restore_faces = last_generation.map(|g| g.restore_faces);
-        let sampler = last_generation.map(|g| g.sampler);
-        let model = last_generation
-            .and_then(|g| util::find_model_by_hash(models, &g.model_hash).map(|t| t.1));
+        let base = {
+            // always applied
+            let prompt = interrogation.result;
+            let prompt = if let sd::Interrogator::DeepDanbooru = interrogation.interrogator {
+                let mut components: Vec<_> = prompt.split(", ").collect();
+                components.shuffle(&mut rand::thread_rng());
+                components.join(", ")
+            } else {
+                prompt
+            };
 
-        interaction
-            .edit(
-                http,
-                &format!("`{prompt}`: Generating (waiting for start)..."),
-            )
-            .await?;
+            let width = last_generation.map(|g| g.width);
+            let height = last_generation.map(|g| g.height);
+            let cfg_scale = last_generation.map(|g| g.cfg_scale);
+            let steps = last_generation.map(|g| g.steps);
+            let tiling = last_generation.map(|g| g.tiling);
+            let restore_faces = last_generation.map(|g| g.restore_faces);
+            let sampler = last_generation.map(|g| g.sampler);
+            let model = last_generation
+                .and_then(|g| util::find_model_by_hash(models, &g.model_hash).map(|t| t.1));
 
-        let mut base = sd::BaseGenerationRequest {
-            prompt: prompt.clone(),
-            negative_prompt: None,
-            seed: None,
-            batch_size: Some(1),
-            batch_count: Some(1),
-            width,
-            height,
-            cfg_scale,
-            steps,
-            tiling,
-            restore_faces,
-            sampler,
-            model,
-            ..Default::default()
-        };
-        util::fixup_base_generation_request(&mut base);
-        base
-    };
-    let prompt = base.prompt.clone();
-    issuer::generation_task(
-        client,
-        tokio::task::spawn(
-            client.generate_from_text(&sd::TextToImageGenerationRequest {
-                base,
+            interaction
+                .edit(
+                    http,
+                    &format!("`{prompt}`: Generating (waiting for start)..."),
+                )
+                .await?;
+
+            let mut base = sd::BaseGenerationRequest {
+                prompt: prompt.clone(),
+                negative_prompt: None,
+                seed: None,
+                batch_size: Some(1),
+                batch_count: Some(1),
+                width,
+                height,
+                cfg_scale,
+                steps,
+                tiling,
+                restore_faces,
+                sampler,
+                model,
                 ..Default::default()
-            }),
-        ),
-        models,
-        store,
-        http,
-        interaction,
-        None,
-        (prompt.as_str(), None),
-        None,
-    )
-    .await
+            };
+            util::fixup_base_generation_request(&mut base);
+            base
+        };
+        let prompt = base.prompt.clone();
+        issuer::generation_task(
+            client,
+            tokio::task::spawn(
+                client.generate_from_text(&sd::TextToImageGenerationRequest {
+                    base,
+                    ..Default::default()
+                }),
+            ),
+            models,
+            store,
+            http,
+            interaction,
+            None,
+            (prompt.as_str(), None),
+            None,
+        )
+        .await
+    })
+    .await;
 }
 
 async fn reissue_impl(
@@ -301,16 +315,19 @@ async fn reissue_impl(
     id: i64,
     title: &str,
     custom_id: cid::Generation,
-) -> anyhow::Result<()> {
-    let generation = store.get_generation(id)?.context("generation not found")?;
+) {
+    util::run_and_report_error(mci, http, async {
+        let generation = store.get_generation(id)?.context("generation not found")?;
 
-    mci.create_interaction_response(
-        http,
-        util::create_modal_interaction_response!(title, custom_id, generation),
-    )
-    .await?;
+        mci.create_interaction_response(
+            http,
+            util::create_modal_interaction_response!(title, custom_id, generation),
+        )
+        .await?;
 
-    Ok(())
+        Ok(())
+    })
+    .await;
 }
 
 async fn reissue_response_impl(
@@ -321,7 +338,7 @@ async fn reissue_response_impl(
     msi: &ModalSubmitInteraction,
     id: i64,
     paintover: bool,
-) -> anyhow::Result<()> {
+) {
     let rows: HashMap<String, String> = msi
         .data
         .components
@@ -396,100 +413,105 @@ async fn retry_impl(
     interaction: &dyn DiscordInteraction,
     id: i64,
     overrides: Overrides<'_>,
-) -> anyhow::Result<()> {
+) {
     interaction
         .create(http, "Retry request received, processing...")
-        .await?;
-    let mut generation = store
-        .get_generation(id)?
-        .context("generation not found")?
-        .clone();
+        .await
+        .unwrap();
 
-    if overrides.paintover {
-        let init_image = image::load_from_memory(&generation.image)?;
-        let init_url = generation
-            .image_url
-            .clone()
-            .unwrap_or_else(|| "UNKNOWN".to_string());
+    util::run_and_report_error(interaction, http, async {
+        let mut generation = store
+            .get_generation(id)?
+            .context("generation not found")?
+            .clone();
 
-        if let Some(image_generation) = generation.image_generation.as_mut() {
-            image_generation.init_image = init_image;
-            image_generation.init_url = init_url;
-        } else {
-            generation.image_generation = Some(store::ImageGeneration {
-                init_image,
-                init_url,
-                resize_mode: Default::default(),
-            });
-        }
-    }
+        if overrides.paintover {
+            let init_image = image::load_from_memory(&generation.image)?;
+            let init_url = generation
+                .image_url
+                .clone()
+                .unwrap_or_else(|| "UNKNOWN".to_string());
 
-    let mut request = generation.as_generation_request(models);
-    {
-        let base = match &mut request {
-            store::GenerationRequest::Text(r) => &mut r.base,
-            store::GenerationRequest::Image(r) => &mut r.base,
-        };
-        if let Some(prompt) = overrides.prompt {
-            base.prompt = prompt.to_string();
+            if let Some(image_generation) = generation.image_generation.as_mut() {
+                image_generation.init_image = init_image;
+                image_generation.init_url = init_url;
+            } else {
+                generation.image_generation = Some(store::ImageGeneration {
+                    init_image,
+                    init_url,
+                    resize_mode: Default::default(),
+                });
+            }
         }
-        if let Some(negative_prompt) = overrides.negative_prompt {
-            base.negative_prompt = Some(negative_prompt.to_string());
+
+        let mut request = generation.as_generation_request(models);
+        {
+            let base = match &mut request {
+                store::GenerationRequest::Text(r) => &mut r.base,
+                store::GenerationRequest::Image(r) => &mut r.base,
+            };
+            if let Some(prompt) = overrides.prompt {
+                base.prompt = prompt.to_string();
+            }
+            if let Some(negative_prompt) = overrides.negative_prompt {
+                base.negative_prompt = Some(negative_prompt.to_string());
+            }
+            if let Some(width) = overrides.width {
+                base.width = Some(width);
+            }
+            if let Some(height) = overrides.height {
+                base.height = Some(height);
+            }
+            if let Some(guidance_scale) = overrides.guidance_scale {
+                base.cfg_scale = Some(guidance_scale as f32);
+            }
+            if let Some(steps) = overrides.steps {
+                base.steps = Some(steps as u32);
+            }
+            if let Some(seed) = overrides.seed {
+                base.seed = seed;
+            }
+            if let Some(denoising_strength) = overrides.denoising_strength {
+                base.denoising_strength = Some(denoising_strength as f32);
+            }
+            util::fixup_base_generation_request(base);
         }
-        if let Some(width) = overrides.width {
-            base.width = Some(width);
-        }
-        if let Some(height) = overrides.height {
-            base.height = Some(height);
-        }
-        if let Some(guidance_scale) = overrides.guidance_scale {
-            base.cfg_scale = Some(guidance_scale as f32);
-        }
-        if let Some(steps) = overrides.steps {
-            base.steps = Some(steps as u32);
-        }
-        if let Some(seed) = overrides.seed {
-            base.seed = seed;
-        }
-        if let Some(denoising_strength) = overrides.denoising_strength {
-            base.denoising_strength = Some(denoising_strength as f32);
-        }
-        util::fixup_base_generation_request(base);
-    }
-    interaction
-        .edit(
+        interaction
+            .edit(
+                http,
+                &format!(
+                    "`{}`{}: Generating retry (waiting for start)...",
+                    request.base().prompt,
+                    request
+                        .base()
+                        .negative_prompt
+                        .as_ref()
+                        .filter(|s| !s.is_empty())
+                        .map(|s| format!(" - `{s}`"))
+                        .unwrap_or_default()
+                ),
+            )
+            .await?;
+
+        issuer::generation_task(
+            client,
+            request.generate(client),
+            models,
+            store,
             http,
-            &format!(
-                "`{}`{}: Generating retry (waiting for start)...",
-                request.base().prompt,
-                request
-                    .base()
-                    .negative_prompt
-                    .as_ref()
-                    .filter(|s| !s.is_empty())
-                    .map(|s| format!(" - `{s}`"))
-                    .unwrap_or_default()
+            interaction,
+            None,
+            (
+                &request.base().prompt,
+                request.base().negative_prompt.as_deref(),
             ),
+            generation.image_generation.clone(),
         )
         .await?;
 
-    issuer::generation_task(
-        client,
-        request.generate(client),
-        models,
-        store,
-        http,
-        interaction,
-        None,
-        (
-            &request.base().prompt,
-            request.base().negative_prompt.as_deref(),
-        ),
-        generation.image_generation.clone(),
-    )
-    .await?;
-
-    Ok(())
+        Ok(())
+    })
+    .await;
 }
 
 struct Overrides<'a> {

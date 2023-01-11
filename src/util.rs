@@ -1,4 +1,5 @@
 use anyhow::Context;
+use futures::Future;
 use serenity::{
     async_trait,
     http::Http,
@@ -82,15 +83,10 @@ pub fn value_to_channel(v: &CommandDataOptionValue) -> Option<PartialChannel> {
     }
 }
 
-pub fn get_image_url(aci: &ApplicationCommandInteraction) -> anyhow::Result<String> {
-    let image_attachment_url = get_value(&aci.data.options, constant::value::IMAGE_ATTACHMENT)
-        .and_then(value_to_attachment_url);
-
-    let image_url =
-        get_value(&aci.data.options, constant::value::IMAGE_URL).and_then(value_to_string);
-
-    image_attachment_url
-        .or(image_url)
+pub fn get_image_url(options: &[CommandDataOption]) -> anyhow::Result<String> {
+    get_value(options, constant::value::IMAGE_ATTACHMENT)
+        .and_then(value_to_attachment_url)
+        .or_else(|| get_value(options, constant::value::IMAGE_URL).and_then(value_to_string))
         .context("expected an image to be passed in")
 }
 
@@ -274,6 +270,7 @@ pub trait DiscordInteraction: Send + Sync {
     async fn create(&self, http: &Http, message: &str) -> anyhow::Result<()>;
     async fn get_interaction_message(&self, http: &Http) -> anyhow::Result<Message>;
     async fn edit(&self, http: &Http, message: &str) -> anyhow::Result<()>;
+    async fn create_or_edit(&self, http: &Http, message: &str) -> anyhow::Result<()>;
 
     fn channel_id(&self) -> ChannelId;
     fn message(&self) -> Option<&Message>;
@@ -301,6 +298,15 @@ macro_rules! implement_interaction {
                     .await?
                     .edit(http, |m| m.content(message))
                     .await?)
+            }
+            async fn create_or_edit(&self, http: &Http, message: &str) -> anyhow::Result<()> {
+                Ok(
+                    if let Ok(mut msg) = self.get_interaction_message(http).await {
+                        msg.edit(http, |m| m.content(message)).await?
+                    } else {
+                        self.create(http, message).await?
+                    },
+                )
             }
 
             fn channel_id(&self) -> ChannelId {
@@ -333,6 +339,20 @@ macro_rules! interaction_message {
 implement_interaction!(ApplicationCommandInteraction);
 implement_interaction!(MessageComponentInteraction);
 implement_interaction!(ModalSubmitInteraction);
+
+/// Runs the [body] and edits the interaction response if an error occurs.
+pub async fn run_and_report_error(
+    interaction: &dyn DiscordInteraction,
+    http: &Http,
+    body: impl Future<Output = anyhow::Result<()>>,
+) {
+    if let Err(err) = body.await {
+        interaction
+            .create_or_edit(http, &format!("Error: {}", err.to_string()))
+            .await
+            .unwrap();
+    }
+}
 
 macro_rules! create_modal_interaction_response {
     ($title:expr, $custom_id:expr, $generation:ident) => {

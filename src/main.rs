@@ -185,11 +185,9 @@ impl EventHandler for Handler {
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
-        let mut channel_id = None;
         let http = &ctx.http;
-        let result = match interaction {
+        match interaction {
             Interaction::ApplicationCommand(cmd) => {
-                channel_id = Some(cmd.channel_id);
                 let name = cmd.data.name.as_str();
                 let commands = &Configuration::get().commands;
 
@@ -218,15 +216,11 @@ impl EventHandler for Handler {
                         &self.store,
                     )
                     .await
-                } else {
-                    Ok(())
                 }
             }
             Interaction::MessageComponent(mci) => {
                 use exilent::message_component as exmc;
                 use wirehead::message_component as whmc;
-
-                channel_id = Some(mci.channel_id);
 
                 let custom_id = cid::CustomId::try_from(mci.data.custom_id.as_str())
                     .expect("invalid interaction id");
@@ -325,8 +319,6 @@ impl EventHandler for Handler {
             Interaction::ModalSubmit(msi) => {
                 use exilent::message_component as exmc;
 
-                channel_id = Some(msi.channel_id);
-
                 let custom_id = cid::CustomId::try_from(msi.data.custom_id.as_str())
                     .expect("invalid interaction id");
 
@@ -366,17 +358,7 @@ impl EventHandler for Handler {
                     cid::CustomId::Wirehead { .. } => unreachable!(),
                 }
             }
-            _ => Ok(()),
+            _ => {}
         };
-        if let Some(channel_id) = channel_id {
-            if let Err(err) = result.as_ref() {
-                channel_id
-                    .send_message(http, |r| r.content(format!("Error: {err:?}")))
-                    .await
-                    .ok();
-
-                result.unwrap();
-            }
-        }
     }
 }

@@ -97,7 +97,7 @@ pub async fn wirehead(
     client: Arc<sd::Client>,
     models: &[sd::Model],
     store: &store::Store,
-) -> anyhow::Result<()> {
+) {
     let subcommand = &cmd.data.options[0];
     match subcommand.name.as_str() {
         "start" => start(http, &cmd, subcommand, sessions, client, models, store).await,
@@ -114,154 +114,154 @@ async fn start(
     client: Arc<sd::Client>,
     models: &[sd::Model],
     store: &store::Store,
-) -> anyhow::Result<()> {
-    if sessions.lock().contains_key(&cmd.channel_id) {
-        cmd.create_interaction_response(&http, |response| {
-            response
-                .kind(InteractionResponseType::ChannelMessageWithSource)
-                .interaction_response_data(|message| {
-                    message.content("Session already under way...")
-                })
-        })
-        .await?;
-        return Ok(());
-    }
+) {
+    cmd.create(&http, "Starting...").await.unwrap();
 
-    cmd.create(&http, "Starting...").await?;
+    util::run_and_report_error(cmd, http.clone().as_ref(), async {
+        if sessions.lock().contains_key(&cmd.channel_id) {
+            cmd.create_interaction_response(&http, |response| {
+                response
+                    .kind(InteractionResponseType::ChannelMessageWithSource)
+                    .interaction_response_data(|message| {
+                        message.content("Session already under way...")
+                    })
+            })
+            .await?;
+            return Ok(());
+        }
 
-    let tag_selection = util::get_value(&subcommand.options, constant::value::TAGS)
-        .and_then(util::value_to_string)
-        .context("no tag selection")?;
+        let tag_selection = util::get_value(&subcommand.options, constant::value::TAGS)
+            .and_then(util::value_to_string)
+            .context("no tag selection")?;
 
-    let hide_prompt = util::get_value(&subcommand.options, constant::value::HIDE_PROMPT)
-        .and_then(util::value_to_bool)
-        .unwrap_or(false);
-
-    let to_exilent_enabled =
-        util::get_value(&subcommand.options, constant::value::TO_EXILENT_ENABLED)
+        let hide_prompt = util::get_value(&subcommand.options, constant::value::HIDE_PROMPT)
             .and_then(util::value_to_bool)
-            .unwrap();
+            .unwrap_or(false);
 
-    let to_exilent_channel =
-        util::get_value(&subcommand.options, constant::value::TO_EXILENT_CHANNEL)
-            .and_then(util::value_to_channel)
-            .map(|c| c.id);
-    if !to_exilent_enabled && to_exilent_channel.is_some() {
-        anyhow::bail!("a To Exilent channel was set, but To Exilent is not enabled");
-    }
-    let to_exilent_channel_id = to_exilent_channel
-        .or(Some(cmd.channel_id))
-        .filter(|_| to_exilent_enabled);
+        let to_exilent_enabled =
+            util::get_value(&subcommand.options, constant::value::TO_EXILENT_ENABLED)
+                .and_then(util::value_to_bool)
+                .unwrap();
 
-    let prefix = util::get_value(&subcommand.options, constant::value::PREFIX)
-        .and_then(util::value_to_string);
-    let suffix = util::get_value(&subcommand.options, constant::value::SUFFIX)
-        .and_then(util::value_to_string);
+        let to_exilent_channel =
+            util::get_value(&subcommand.options, constant::value::TO_EXILENT_CHANNEL)
+                .and_then(util::value_to_channel)
+                .map(|c| c.id);
+        if !to_exilent_enabled && to_exilent_channel.is_some() {
+            anyhow::bail!("a To Exilent channel was set, but To Exilent is not enabled");
+        }
+        let to_exilent_channel_id = to_exilent_channel
+            .or(Some(cmd.channel_id))
+            .filter(|_| to_exilent_enabled);
 
-    let params = command::OwnedBaseGenerationParameters::load(
-        cmd.user.id,
-        &subcommand.options,
-        store,
-        models,
-        false,
-        false,
-    )?;
+        let prefix = util::get_value(&subcommand.options, constant::value::PREFIX)
+            .and_then(util::value_to_string);
+        let suffix = util::get_value(&subcommand.options, constant::value::SUFFIX)
+            .and_then(util::value_to_string);
 
-    fn display<T: Display>(value: &Option<T>) -> Option<&dyn Display> {
-        value.as_ref().map(|s| s as &dyn Display)
-    }
+        let params = command::OwnedBaseGenerationParameters::load(
+            cmd.user.id,
+            &subcommand.options,
+            store,
+            models,
+            false,
+            false,
+        )?;
 
-    cmd.edit(
-        &http,
-        &format!(
-            "Starting with the following settings:\n{}",
-            [
-                ("Tags", Some(&tag_selection as &dyn Display)),
-                ("Prefix", display(&prefix)),
-                ("Suffix", display(&suffix)),
-                ("Negative prompt", display(&params.negative_prompt)),
-                ("Seed", display(&params.seed)),
-                ("Count", display(&params.batch_count)),
-                ("Width", display(&params.width)),
-                ("Height", display(&params.height)),
-                ("Guidance scale", display(&params.cfg_scale)),
-                ("Denoising strength", display(&params.denoising_strength)),
-                ("Steps", display(&params.steps)),
-                ("Tiling", display(&params.tiling)),
-                ("Restore faces", display(&params.restore_faces)),
-                ("Sampler", display(&params.sampler)),
-                (
-                    "Model",
-                    display(&params.model.as_ref().map(|s| &s.name as &dyn Display))
-                ),
-                (
-                    "To Exilent channel",
-                    display(&to_exilent_channel_id.map(|c| c.mention()))
-                )
-            ]
-            .into_iter()
-            .filter_map(|(key, value)| Some((key, value?)))
-            .map(|(key, value)| format!("- *{key}*: {value}"))
-            .collect::<Vec<_>>()
-            .join("\n")
-        ),
-    )
-    .await?;
+        fn display<T: Display>(value: &Option<T>) -> Option<&dyn Display> {
+            value.as_ref().map(|s| s as &dyn Display)
+        }
 
-    let tags = Configuration::get()
-        .tags()
-        .get(&tag_selection)
-        .context("invalid tag selection")?
-        .iter()
-        .cloned()
-        .collect();
+        cmd.edit(
+            &http,
+            &format!(
+                "Starting with the following settings:\n{}",
+                [
+                    ("Tags", Some(&tag_selection as &dyn Display)),
+                    ("Prefix", display(&prefix)),
+                    ("Suffix", display(&suffix)),
+                    ("Negative prompt", display(&params.negative_prompt)),
+                    ("Seed", display(&params.seed)),
+                    ("Count", display(&params.batch_count)),
+                    ("Width", display(&params.width)),
+                    ("Height", display(&params.height)),
+                    ("Guidance scale", display(&params.cfg_scale)),
+                    ("Denoising strength", display(&params.denoising_strength)),
+                    ("Steps", display(&params.steps)),
+                    ("Tiling", display(&params.tiling)),
+                    ("Restore faces", display(&params.restore_faces)),
+                    ("Sampler", display(&params.sampler)),
+                    (
+                        "Model",
+                        display(&params.model.as_ref().map(|s| &s.name as &dyn Display))
+                    ),
+                    (
+                        "To Exilent channel",
+                        display(&to_exilent_channel_id.map(|c| c.mention()))
+                    )
+                ]
+                .into_iter()
+                .filter_map(|(key, value)| Some((key, value?)))
+                .map(|(key, value)| format!("- *{key}*: {value}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+            ),
+        )
+        .await?;
 
-    sessions.lock().insert(
-        cmd.channel_id,
-        super::Session::new(
-            http,
+        let tags = Configuration::get()
+            .tags()
+            .get(&tag_selection)
+            .context("invalid tag selection")?
+            .iter()
+            .cloned()
+            .collect();
+
+        sessions.lock().insert(
             cmd.channel_id,
-            to_exilent_channel_id,
-            client.clone(),
-            params,
-            tags,
-            hide_prompt,
-            prefix,
-            suffix,
-        )?,
-    );
-    Ok(())
+            super::Session::new(
+                http,
+                cmd.channel_id,
+                to_exilent_channel_id,
+                client.clone(),
+                params,
+                tags,
+                hide_prompt,
+                prefix,
+                suffix,
+            )?,
+        );
+        Ok(())
+    })
+    .await;
 }
 
 async fn stop(
     http: &Http,
     cmd: &ApplicationCommandInteraction,
     sessions: &Mutex<HashMap<ChannelId, Session>>,
-) -> anyhow::Result<()> {
-    let session = sessions.lock().remove(&cmd.channel_id);
-    let Some(session) = session else {
-            cmd.create_interaction_response(http, |response| {
-                response
-                    .kind(InteractionResponseType::ChannelMessageWithSource)
-                    .interaction_response_data(|message| {
-                        message.content("No session running...")
-                    })
-            })
-            .await?;
-            return Ok(());
+) {
+    cmd.create(http, "Attemping to stop Wirehead session...")
+        .await
+        .unwrap();
+
+    util::run_and_report_error(cmd, http, async {
+        let session = match sessions.lock().remove(&cmd.channel_id) {
+            Some(session) => session,
+            _ => {
+                anyhow::bail!("No Wirehead session running!");
+            }
         };
 
-    session.shutdown();
-    std::mem::drop(session);
+        session.shutdown();
+        std::mem::drop(session);
+        cmd.edit(
+            http,
+            "Wirehead session terminated. You are now free to start again.",
+        )
+        .await?;
 
-    cmd.create_interaction_response(http, |response| {
-        response
-            .kind(InteractionResponseType::ChannelMessageWithSource)
-            .interaction_response_data(|message| {
-                message.content("Session terminated. You are now free to start again.")
-            })
+        Ok(())
     })
-    .await?;
-
-    Ok(())
+    .await;
 }
