@@ -28,6 +28,7 @@ pub struct Session {
     hide_prompt: bool,
     generation_parameters: GenerationParameters,
     to_exilent_channel_id: Option<ChannelId>,
+    original_message_link: String,
 }
 impl Session {
     pub fn new(
@@ -37,6 +38,7 @@ impl Session {
         client: Arc<sd::Client>,
         hide_prompt: bool,
         generation_parameters: GenerationParameters,
+        original_message_link: String,
     ) -> anyhow::Result<Self> {
         let shutdown = Arc::new(AtomicBool::new(false));
         let fitness_store = Arc::new(FitnessStore::new(shutdown.clone()));
@@ -70,6 +72,7 @@ impl Session {
             hide_prompt,
             generation_parameters,
             to_exilent_channel_id,
+            original_message_link,
         })
     }
 

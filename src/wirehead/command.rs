@@ -220,6 +220,7 @@ async fn start(
             .cloned()
             .collect();
 
+        let original_message_link = cmd.get_interaction_response(&http).await?.link();
         sessions.lock().insert(
             cmd.channel_id,
             super::Session::new(
@@ -234,6 +235,7 @@ async fn start(
                     prefix,
                     suffix,
                 },
+                original_message_link,
             )?,
         );
         Ok(())
@@ -259,12 +261,15 @@ async fn stop(
         };
 
         session.shutdown();
-        std::mem::drop(session);
         cmd.edit(
             http,
-            "Wirehead session terminated. You are now free to start again.",
+            &format!(
+                "Wirehead session ({}) terminated. You are now free to start again.",
+                session.original_message_link
+            ),
         )
         .await?;
+        std::mem::drop(session);
 
         Ok(())
     })
