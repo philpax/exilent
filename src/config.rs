@@ -27,18 +27,26 @@ impl Default for Authentication {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Default)]
+pub struct Models {
+    #[serde(default)]
+    pub allowlist: HashSet<String>,
+    #[serde(default)]
+    pub blocklist: HashSet<String>,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct General {
-    pub deepdanbooru_tag_whitelist: Option<PathBuf>,
+    pub deepdanbooru_tag_allowlist: Option<PathBuf>,
     pub automatically_prepend_keyword: bool,
-    pub hide_models: HashSet<String>,
+    pub models: Models,
 }
 impl Default for General {
     fn default() -> Self {
         Self {
-            deepdanbooru_tag_whitelist: Some(constant::resource::danbooru_sanitized_path()),
+            deepdanbooru_tag_allowlist: Some(constant::resource::danbooru_sanitized_path()),
             automatically_prepend_keyword: true,
-            hide_models: HashSet::new(),
+            models: Default::default(),
         }
     }
 }
@@ -182,7 +190,7 @@ impl Configuration {
     }
 
     pub fn deepdanbooru_tag_whitelist(&self) -> Option<&Tags> {
-        self.runtime.deepdanbooru_tag_whitelist.as_ref()
+        self.runtime.deepdanbooru_tag_allowlist.as_ref()
     }
 
     pub fn tags(&self) -> &HashMap<String, Tags> {
@@ -199,9 +207,9 @@ impl Configuration {
         };
 
         config.runtime = ConfigurationRuntime {
-            deepdanbooru_tag_whitelist: config
+            deepdanbooru_tag_allowlist: config
                 .general
-                .deepdanbooru_tag_whitelist
+                .deepdanbooru_tag_allowlist
                 .as_deref()
                 .map(read_tags_from_file)
                 .transpose()?,
@@ -237,7 +245,7 @@ pub type Tags = HashSet<String>;
 
 #[derive(Debug, Default)]
 struct ConfigurationRuntime {
-    pub deepdanbooru_tag_whitelist: Option<Tags>,
+    pub deepdanbooru_tag_allowlist: Option<Tags>,
     pub tags: HashMap<String, Tags>,
 }
 

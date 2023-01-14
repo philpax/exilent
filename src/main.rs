@@ -52,17 +52,22 @@ async fn main() -> anyhow::Result<()> {
             .await?,
         )
     };
-    let models: Vec<_> = client
-        .models()
-        .await?
-        .into_iter()
-        .filter(|m| {
-            !Configuration::get()
-                .general
-                .hide_models
-                .contains(util::extract_last_bracketed_string(&m.title).unwrap())
-        })
-        .collect();
+
+    let models: Vec<_> = {
+        let models = &Configuration::get().general.models;
+
+        client
+            .models()
+            .await?
+            .into_iter()
+            .filter(|m| {
+                let hash = util::extract_last_bracketed_string(&m.title).unwrap();
+                let in_allowlist = models.allowlist.is_empty() || models.allowlist.contains(hash);
+                let in_blocklist = models.blocklist.contains(hash);
+                in_allowlist && !in_blocklist
+            })
+            .collect()
+    };
     let store = Store::load()?;
 
     // Build our client.
@@ -174,7 +179,7 @@ impl EventHandler for Handler {
                     "Discord refused to register the commands due to the request being too long."
                 );
                 println!(
-                    "Consider hiding some models under `general.hide_models` in `config.toml` to fix this."
+                    "Consider using `general.models.allowlist` or `general.models.blocklist` to control the number of models in `config.toml` to fix this."
                 );
                 ctx.shard.shutdown_clean();
                 std::process::exit(1);
