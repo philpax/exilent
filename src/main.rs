@@ -54,20 +54,43 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let models: Vec<_> = {
-        let models = &Configuration::get().general.models;
+        let config_models = &Configuration::get().general.models;
 
-        client
-            .models()
-            .await?
+        let models = client.models().await?;
+        let hashes: HashSet<_> = models
+            .iter()
+            .filter_map(|m| m.hash_sha256.clone())
+            .collect();
+        for (list_name, list) in [
+            ("allowlist", &config_models.allowlist),
+            ("blocklist", &config_models.blocklist),
+        ] {
+            for hash in list {
+                if !hashes.contains(hash) {
+                    println!("Warning: The hash `{hash}` in the {list_name} does not correspond to any of the loaded models. Do you need to migrate to the new hash system?");
+                }
+            }
+        }
+
+        models
             .into_iter()
             .filter(|m| {
-                let hash = util::extract_last_bracketed_string(&m.title).unwrap();
-                let in_allowlist = models.allowlist.is_empty() || models.allowlist.contains(hash);
-                let in_blocklist = models.blocklist.contains(hash);
+                if m.hash_sha256.is_some() {
+                    true
+                } else {
+                    println!("Warning: The model `{}` does not have a SHA256 hash and will be skipped. Please load it in the UI.", m.name);
+                    false
+                }
+            })
+            .filter(|m| {
+                let hash = m.hash_sha256.as_ref().unwrap();
+                let in_allowlist = config_models.allowlist.is_empty() || config_models.allowlist.contains(hash);
+                let in_blocklist = config_models.blocklist.contains(hash);
                 in_allowlist && !in_blocklist
             })
             .collect()
     };
+
     let store = Store::load()?;
 
     // Build our client.

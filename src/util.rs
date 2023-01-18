@@ -134,7 +134,7 @@ pub fn find_model_by_hash(models: &[sd::Model], model_hash: &str) -> Option<(usi
     models
         .iter()
         .enumerate()
-        .find(|(_, m)| extract_last_bracketed_string(&m.title) == Some(model_hash))
+        .find(|(_, m)| m.hash_sha256.as_ref().map(|s| s.as_str()) == Some(model_hash))
         .map(|(idx, model)| (idx, model.clone()))
 }
 
@@ -155,7 +155,7 @@ pub fn fixup_base_generation_request(params: &mut sd::BaseGenerationRequest) {
     }
 }
 
-pub fn extract_last_bracketed_string(string: &str) -> Option<&str> {
+fn extract_last_bracketed_string(string: &str) -> Option<&str> {
     let left = string.rfind('[')?;
     let right = string.rfind(']')?;
     (left < right).then_some(&string[left + 1..right])
