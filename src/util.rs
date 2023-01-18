@@ -134,7 +134,7 @@ pub fn find_model_by_hash(models: &[sd::Model], model_hash: &str) -> Option<(usi
     models
         .iter()
         .enumerate()
-        .find(|(_, m)| m.hash_sha256.as_ref().map(|s| s.as_str()) == Some(model_hash))
+        .find(|(_, m)| m.hash_sha256.as_deref() == Some(model_hash))
         .map(|(idx, model)| (idx, model.clone()))
 }
 
