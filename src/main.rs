@@ -53,7 +53,7 @@ async fn main() -> anyhow::Result<()> {
         )
     };
 
-    let models: Vec<_> = {
+    let mut models: Vec<_> = {
         let config_models = &Configuration::get().general.models;
 
         let models = client.models().await?;
@@ -90,7 +90,7 @@ async fn main() -> anyhow::Result<()> {
             })
             .collect()
     };
-
+    models.sort_by(|a, b| a.name.cmp(&b.name));
     let store = Store::load()?;
 
     // Build our client.
