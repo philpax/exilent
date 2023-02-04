@@ -138,6 +138,14 @@ pub fn find_model_by_hash(models: &[sd::Model], model_hash: &str) -> Option<(usi
         .map(|(idx, model)| (idx, model.clone()))
 }
 
+pub fn model_hash_to_name(models: &[sd::Model], model_hash: &str) -> String {
+    find_model_by_hash(models, model_hash)
+        .as_ref()
+        .map(|p| p.1.name.as_str())
+        .unwrap_or(model_hash)
+        .to_string()
+}
+
 pub fn encode_image_to_png_bytes(image: image::DynamicImage) -> anyhow::Result<Vec<u8>> {
     let mut bytes: Vec<u8> = Vec::new();
     let mut cursor = std::io::Cursor::new(&mut bytes);

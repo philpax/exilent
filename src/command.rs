@@ -147,7 +147,11 @@ pub fn populate_generate_options(
             .required(false);
 
             for model in chunk {
-                opt.add_string_choice(&model.name, &model.title);
+                let hash_short = match model.hash_short.as_ref() {
+                    Some(hash) => hash,
+                    None => panic!("The model '{}' was found without a hash while adding options; this shouldn't be possible. Please report the issue!", model.name),
+                };
+                opt.add_string_choice(&model.name, hash_short);
             }
 
             opt
@@ -252,16 +256,21 @@ impl OwnedBaseGenerationParameters {
                 .flat_map(value_to_string)
                 .collect();
             if model_params.len() > 1 {
-                anyhow::bail!("more than one model specified: {:?}", model_params);
+                anyhow::bail!(
+                    "More than one model was specified: {}",
+                    model_params
+                        .iter()
+                        .map(|hash| util::model_hash_to_name(models, hash.as_str()))
+                        .join(", ")
+                );
             }
 
-            model_params
+            let model_hash = model_params
                 .first()
-                .and_then(|v| models.iter().find(|m| m.title == *v).cloned())
-                .or_else(|| {
-                    last_generation
-                        .and_then(|g| find_model_by_hash(models, &g.model_hash).map(|t| t.1))
-                })
+                .or_else(|| last_generation.map(|g| &g.model_hash));
+
+           model_hash.and_then(|hash| Some(find_model_by_hash(models, hash)?.1));
+            
         };
 
         Ok(OwnedBaseGenerationParameters {
