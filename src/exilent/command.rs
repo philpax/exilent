@@ -326,8 +326,7 @@ async fn stats(
                                         .as_ref()
                                         .map(|m| m.1.name.clone())
                                         .unwrap_or_else(|| format!(
-                                            "unknown model [{}]",
-                                            model_hash
+                                            "unknown model [{model_hash}]"
                                         )),
                                     count
                                 )

@@ -114,7 +114,7 @@ pub fn thread(
                 break;
             }
             Err(error) => {
-                println!("{}", error);
+                println!("{error}");
                 break;
             }
         }

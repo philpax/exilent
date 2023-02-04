@@ -111,7 +111,7 @@ async fn main() -> anyhow::Result<()> {
     // Shards will automatically attempt to reconnect, and will perform
     // exponential backoff until it reconnects.
     if let Err(why) = client.start().await {
-        println!("Client error: {:?}", why);
+        println!("Client error: {why:?}");
     }
 
     Ok(())
@@ -192,7 +192,7 @@ impl EventHandler for Handler {
         println!("{} is connected; registering commands...", ready.user.name);
 
         if let Err(err) = ready_handler(&ctx.http, &self.models).await {
-            println!("Error while registering commands: `{}`", err);
+            println!("Error while registering commands: `{err}`");
             if err.to_string() == "expected object" {
                 println!();
                 println!(

@@ -181,7 +181,7 @@ fn prepend_keyword_if_necessary_unchecked(prompt: &str, model_name: &str) -> Str
         if prompt.contains(keyword) {
             prompt.to_string()
         } else {
-            format!("{}, {}", keyword, prompt)
+            format!("{keyword}, {prompt}")
         }
     } else {
         prompt.to_string()
@@ -348,7 +348,7 @@ pub async fn run_and_report_error(
 ) {
     if let Err(err) = body.await {
         interaction
-            .create_or_edit(http, &format!("Error: {}", err))
+            .create_or_edit(http, &format!("Error: {err}"))
             .await
             .unwrap();
     }

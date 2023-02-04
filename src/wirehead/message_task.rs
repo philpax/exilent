@@ -78,7 +78,7 @@ pub async fn task(parameters: Parameters) -> anyhow::Result<()> {
                     m.content(format!(
                         "**Best result so far**{}",
                         if !hide_prompt {
-                            format!(": `{}`", prompt)
+                            format!(": `{prompt}`")
                         } else {
                             String::new()
                         }
@@ -187,7 +187,7 @@ async fn generate(
     Ok(match result {
         Ok(result) => result.pngs.into_iter().zip(result.info.seeds).collect(),
         Err(err) => {
-            println!("generation failed: {:?}", err);
+            println!("generation failed: {err:?}");
             vec![(
                 util::encode_image_to_png_bytes(image::open(
                     constant::resource::generation_failed_path(),

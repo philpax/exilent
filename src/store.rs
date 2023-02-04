@@ -458,11 +458,10 @@ impl Store {
                     FROM
                         generation
                     WHERE
-                        {}
+                        {predicate}
                     ORDER BY timestamp
                     DESC LIMIT 1
-                    ",
-                    predicate
+                    "
                 ),
                 params,
                 |r| {

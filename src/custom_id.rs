@@ -187,8 +187,7 @@ impl Display for CustomId {
             } => {
                 write!(
                     f,
-                    "{GENERATION_PREFIX}{SEPARATOR}{id}{SEPARATOR}{}",
-                    generation
+                    "{GENERATION_PREFIX}{SEPARATOR}{id}{SEPARATOR}{generation}"
                 )
             }
             CustomId::Interrogation {
@@ -197,8 +196,7 @@ impl Display for CustomId {
             } => {
                 write!(
                     f,
-                    "{INTERROGATION_PREFIX}{SEPARATOR}{id}{SEPARATOR}{}",
-                    interrogation
+                    "{INTERROGATION_PREFIX}{SEPARATOR}{id}{SEPARATOR}{interrogation}"
                 )
             }
             CustomId::Wirehead {
