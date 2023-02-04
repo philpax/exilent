@@ -325,9 +325,7 @@ async fn stats(
                                     util::find_model_by_hash(models, model_hash)
                                         .as_ref()
                                         .map(|m| m.1.name.clone())
-                                        .unwrap_or_else(|| format!(
-                                            "unknown model [{model_hash}]"
-                                        )),
+                                        .unwrap_or_else(|| format!("unknown model [{model_hash}]")),
                                     count
                                 )
                             }),
