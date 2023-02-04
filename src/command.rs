@@ -1,4 +1,5 @@
 use crate::{config::Configuration, constant, store::Store, util};
+use itertools::Itertools;
 use serenity::{
     builder::CreateApplicationCommandOption,
     model::prelude::{
@@ -173,7 +174,7 @@ pub struct OwnedBaseGenerationParameters {
     pub tiling: Option<bool>,
     pub restore_faces: Option<bool>,
     pub sampler: Option<sd::Sampler>,
-    pub model: Option<sd::Model>,
+    pub model: sd::Model,
 }
 impl OwnedBaseGenerationParameters {
     pub fn load(
@@ -269,8 +270,11 @@ impl OwnedBaseGenerationParameters {
                 .first()
                 .or_else(|| last_generation.map(|g| &g.model_hash));
 
-           model_hash.and_then(|hash| Some(find_model_by_hash(models, hash)?.1));
-            
+            let model = model_hash.and_then(|hash| Some(find_model_by_hash(models, hash)?.1));
+            match model {
+                Some(model) => model,
+                None => anyhow::bail!("No model was specified for this request, and you have no past generations to draw upon for a choice of model. Please try again with a model specified."),
+            }
         };
 
         Ok(OwnedBaseGenerationParameters {
@@ -305,7 +309,7 @@ impl OwnedBaseGenerationParameters {
             tiling: self.tiling,
             restore_faces: self.restore_faces,
             sampler: self.sampler,
-            model: self.model.clone(),
+            model: Some(self.model.clone()),
             ..Default::default()
         }
     }

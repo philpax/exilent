@@ -194,10 +194,7 @@ async fn start(
                     ("Tiling", display(&parameters.tiling)),
                     ("Restore faces", display(&parameters.restore_faces)),
                     ("Sampler", display(&parameters.sampler)),
-                    (
-                        "Model",
-                        display(&parameters.model.as_ref().map(|s| &s.name as &dyn Display))
-                    ),
+                    ("Model", display(&Some(parameters.model.name.as_str()))),
                     (
                         "To Exilent channel",
                         display(&to_exilent_channel_id.map(|c| c.mention()))
