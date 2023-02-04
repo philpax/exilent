@@ -57,17 +57,14 @@ async fn main() -> anyhow::Result<()> {
         let config_models = &Configuration::get().general.models;
 
         let models = client.models().await?;
-        let hashes: HashSet<_> = models
-            .iter()
-            .filter_map(|m| m.hash_sha256.clone())
-            .collect();
+        let hashes: HashSet<_> = models.iter().filter_map(|m| m.hash_short.clone()).collect();
         for (list_name, list) in [
             ("allowlist", &config_models.allowlist),
             ("blocklist", &config_models.blocklist),
         ] {
             for hash in list {
                 if !hashes.contains(hash) {
-                    println!("Warning: The hash `{hash}` in the {list_name} does not correspond to any of the loaded models. Do you need to migrate to the new hash system?");
+                    println!("Warning: The hash `{hash}` in the {list_name} does not correspond to any of the loaded models. Do you need to migrate to the new hash system, or use the short hash instead of the long hash?");
                 }
             }
         }
@@ -75,7 +72,7 @@ async fn main() -> anyhow::Result<()> {
         models
             .into_iter()
             .filter(|m| {
-                if m.hash_sha256.is_some() {
+                if m.hash_short.is_some() {
                     true
                 } else {
                     println!("Warning: The model `{}` does not have a SHA256 hash and will be skipped. Please load it in the UI.", m.name);
@@ -83,7 +80,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             })
             .filter(|m| {
-                let hash = m.hash_sha256.as_ref().unwrap();
+                let hash = m.hash_short.as_ref().unwrap();
                 let in_allowlist = config_models.allowlist.is_empty() || config_models.allowlist.contains(hash);
                 let in_blocklist = config_models.blocklist.contains(hash);
                 in_allowlist && !in_blocklist
