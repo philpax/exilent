@@ -35,13 +35,15 @@ const TIME_BETWEEN_BLOCK_CHECKS: u64 = 100;
 
 /// How do the genes of the genotype show up in the phenotype
 pub trait AsPhenotype {
-    fn as_text(&self, tags: &[String]) -> Text;
+    fn as_text(&self, tags: &[String], prefix: Option<&str>, suffix: Option<&str>) -> Text;
 }
 
 impl AsPhenotype for TextGenome {
-    fn as_text(&self, tags: &[String]) -> Text {
-        self.iter()
-            .map(|i| tags[*i as usize].as_str())
+    fn as_text(&self, tags: &[String], prefix: Option<&str>, suffix: Option<&str>) -> Text {
+        prefix
+            .into_iter()
+            .chain(self.iter().map(|i| tags[*i as usize].as_str()))
+            .chain(suffix.into_iter())
             .collect::<Vec<_>>()
             .join(", ")
     }
@@ -112,7 +114,7 @@ pub fn thread(
                 break;
             }
             Err(error) => {
-                println!("{}", error);
+                println!("{error}");
                 break;
             }
         }

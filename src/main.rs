@@ -1,8 +1,10 @@
 use anyhow::Context as AnyhowContext;
+use futures::FutureExt;
 use parking_lot::Mutex;
 use serenity::{
     async_trait,
     client::{Context, EventHandler},
+    http::Http,
     model::{
         application::interaction::Interaction,
         prelude::{command::Command, *},
@@ -50,18 +52,43 @@ async fn main() -> anyhow::Result<()> {
             .await?,
         )
     };
-    let models: Vec<_> = client
-        .models()
-        .await?
-        .into_iter()
-        .filter(|m| {
-            !Configuration::get()
-                .general
-                .hide_models
-                .contains(util::extract_last_bracketed_string(&m.title).unwrap())
-        })
-        .collect();
-    let store = Store::load()?;
+
+    let mut models: Vec<_> = {
+        let config_models = &Configuration::get().general.models;
+
+        let models = client.models().await?;
+        let hashes: HashSet<_> = models.iter().filter_map(|m| m.hash_short.clone()).collect();
+        for (list_name, list) in [
+            ("allowlist", &config_models.allowlist),
+            ("blocklist", &config_models.blocklist),
+        ] {
+            for hash in list {
+                if !hashes.contains(hash) {
+                    println!("Warning: The hash `{hash}` in the {list_name} does not correspond to any of the loaded models. Do you need to migrate to the new hash system, or use the short hash instead of the long hash?");
+                }
+            }
+        }
+
+        models
+            .into_iter()
+            .filter(|m| {
+                if m.hash_short.is_some() {
+                    true
+                } else {
+                    println!("Warning: The model `{}` does not have a SHA256 hash and will be skipped. Please load it in the UI.", m.name);
+                    false
+                }
+            })
+            .filter(|m| {
+                let hash = m.hash_short.as_ref().unwrap();
+                let in_allowlist = config_models.allowlist.is_empty() || config_models.allowlist.contains(hash);
+                let in_blocklist = config_models.blocklist.contains(hash);
+                in_allowlist && !in_blocklist
+            })
+            .collect()
+    };
+    models.sort_by(|a, b| a.name.cmp(&b.name));
+    let store = Store::load().context("failed to initialise database")?;
 
     // Build our client.
     let mut client = Client::builder(
@@ -84,7 +111,7 @@ async fn main() -> anyhow::Result<()> {
     // Shards will automatically attempt to reconnect, and will perform
     // exponential backoff until it reconnects.
     if let Err(why) = client.start().await {
-        println!("Client error: {:?}", why);
+        println!("Client error: {why:?}");
     }
 
     Ok(())
@@ -97,61 +124,101 @@ struct Handler {
     sessions: Mutex<HashMap<ChannelId, wirehead::Session>>,
 }
 
+async fn ready_handler(http: &Http, models: &[sd::Model]) -> anyhow::Result<()> {
+    let registered_commands = Command::get_global_application_commands(http).await?;
+    let registered_commands: HashSet<_> = registered_commands
+        .iter()
+        .map(|c| c.name.as_str())
+        .collect();
+
+    let our_commands: HashSet<_> = Configuration::get()
+        .commands
+        .all()
+        .iter()
+        .cloned()
+        .collect();
+
+    if registered_commands != our_commands {
+        // If the commands registered with Discord don't match the commands configured
+        // for this bot, reset them entirely.
+        Command::set_global_application_commands(http, |c| c.set_application_commands(vec![]))
+            .await?;
+    }
+
+    // TEMP HACK: Serenity 0.11.5 does not handle top-level error objects correctly,
+    // and will panic if it can't parse an error body. We catch the panic and lift it
+    // to an error.
+    //
+    // https://github.com/serenity-rs/serenity/pull/2256 fixes this.
+    async fn catch_async_panic(
+        f: impl std::future::Future<Output = anyhow::Result<()>>,
+    ) -> anyhow::Result<()> {
+        use std::panic;
+
+        let prev_hook = panic::take_hook();
+        panic::set_hook(Box::new(|_| {}));
+        let r = panic::AssertUnwindSafe(f)
+            .catch_unwind()
+            .await
+            .map_err(|e| {
+                anyhow::anyhow!(
+                    "{}",
+                    match e.downcast_ref::<String>() {
+                        Some(v) => v.as_str(),
+                        None => match e.downcast_ref::<&str>() {
+                            Some(v) => v,
+                            _ => "Unknown Source of Error",
+                        },
+                    }
+                )
+            })?;
+        panic::set_hook(prev_hook);
+        r
+    }
+    catch_async_panic(async {
+        exilent::command::register(http, models).await?;
+        wirehead::command::register(http, models).await?;
+
+        anyhow::Ok(())
+    })
+    .await?;
+
+    Ok(())
+}
+
 #[async_trait]
 impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, ready: Ready) {
-        println!("{} is connected!", ready.user.name);
+        println!("{} is connected; registering commands...", ready.user.name);
 
-        let registered_commands = Command::get_global_application_commands(&ctx.http)
-            .await
-            .unwrap();
-        let registered_commands: HashSet<_> = registered_commands
-            .iter()
-            .map(|c| c.name.as_str())
-            .collect();
-
-        let our_commands: HashSet<_> = Configuration::get()
-            .commands
-            .all()
-            .iter()
-            .cloned()
-            .collect();
-
-        if registered_commands != our_commands {
-            // If the commands registered with Discord don't match the commands configured
-            // for this bot, reset them entirely.
-            Command::set_global_application_commands(&ctx.http, |c| {
-                c.set_application_commands(vec![])
-            })
-            .await
-            .unwrap();
+        if let Err(err) = ready_handler(&ctx.http, &self.models).await {
+            println!("Error while registering commands: `{err}`");
+            if err.to_string() == "expected object" {
+                println!();
+                println!(
+                    "Discord refused to register the commands due to the request being too long."
+                );
+                println!(
+                    "Consider using `general.models.allowlist` or `general.models.blocklist` to control the number of models in `config.toml` to fix this."
+                );
+                ctx.shard.shutdown_clean();
+                std::process::exit(1);
+            }
         }
 
-        exilent::command::register(&ctx.http, &self.models)
-            .await
-            .unwrap();
-        wirehead::command::register(&ctx.http, &self.models)
-            .await
-            .unwrap();
+        println!("{} is good to go!", ready.user.name);
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
-        let mut channel_id = None;
         let http = &ctx.http;
-        let result = match interaction {
+        match interaction {
             Interaction::ApplicationCommand(cmd) => {
-                channel_id = Some(cmd.channel_id);
                 let name = cmd.data.name.as_str();
                 let commands = &Configuration::get().commands;
 
                 if name == commands.paint {
                     exilent::command::paint(&self.client, &self.models, &self.store, http, cmd)
                         .await
-                } else if name == commands.paintover {
-                    exilent::command::paintover(&self.client, &self.models, &self.store, http, cmd)
-                        .await
-                } else if name == commands.paintagain {
-                    exilent::command::paintagain(&self.store, http, cmd).await
                 } else if name == commands.postprocess {
                     exilent::command::postprocess(&self.client, http, cmd).await
                 } else if name == commands.interrogate {
@@ -171,15 +238,11 @@ impl EventHandler for Handler {
                         &self.store,
                     )
                     .await
-                } else {
-                    Ok(())
                 }
             }
             Interaction::MessageComponent(mci) => {
                 use exilent::message_component as exmc;
                 use wirehead::message_component as whmc;
-
-                channel_id = Some(mci.channel_id);
 
                 let custom_id = cid::CustomId::try_from(mci.data.custom_id.as_str())
                     .expect("invalid interaction id");
@@ -261,9 +324,8 @@ impl EventHandler for Handler {
                         cid::WireheadValue::ToExilent => {
                             whmc::to_exilent(
                                 &self.sessions,
-                                &self.client,
-                                &self.models,
                                 &self.store,
+                                (&self.client, &self.models),
                                 http,
                                 mci,
                                 genome,
@@ -277,8 +339,6 @@ impl EventHandler for Handler {
             }
             Interaction::ModalSubmit(msi) => {
                 use exilent::message_component as exmc;
-
-                channel_id = Some(msi.channel_id);
 
                 let custom_id = cid::CustomId::try_from(msi.data.custom_id.as_str())
                     .expect("invalid interaction id");
@@ -319,17 +379,7 @@ impl EventHandler for Handler {
                     cid::CustomId::Wirehead { .. } => unreachable!(),
                 }
             }
-            _ => Ok(()),
+            _ => {}
         };
-        if let Some(channel_id) = channel_id {
-            if let Err(err) = result.as_ref() {
-                channel_id
-                    .send_message(http, |r| r.content(format!("Error: {err:?}")))
-                    .await
-                    .ok();
-
-                result.unwrap();
-            }
-        }
     }
 }

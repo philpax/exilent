@@ -1,5 +1,5 @@
 use self::simulation::{FitnessStore, TextGenome};
-use crate::command::OwnedBaseGenerationParameters;
+use crate::command::GenerationParameters as CommandGenerationParameters;
 use serenity::{http::Http, model::prelude::ChannelId};
 use stable_diffusion_a1111_webui_client as sd;
 use std::sync::{
@@ -12,23 +12,33 @@ pub mod message_component;
 mod message_task;
 pub mod simulation;
 
+#[derive(Clone)]
+pub struct GenerationParameters {
+    parameters: CommandGenerationParameters,
+    tags: Vec<String>,
+    prefix: Option<String>,
+    suffix: Option<String>,
+}
+
 pub struct Session {
     _simulation_thread: std::thread::JoinHandle<anyhow::Result<()>>,
     _message_task: tokio::task::JoinHandle<anyhow::Result<()>>,
     fitness_store: Arc<FitnessStore>,
     shutdown: Arc<AtomicBool>,
-    pub tags: Vec<String>,
-    pub hide_prompt: bool,
-    pub parameters: OwnedBaseGenerationParameters,
+    hide_prompt: bool,
+    generation_parameters: GenerationParameters,
+    to_exilent_channel_id: Option<ChannelId>,
+    original_message_link: String,
 }
 impl Session {
     pub fn new(
         http: Arc<Http>,
         channel_id: ChannelId,
+        to_exilent_channel_id: Option<ChannelId>,
         client: Arc<sd::Client>,
-        parameters: OwnedBaseGenerationParameters,
-        tags: Vec<String>,
         hide_prompt: bool,
+        generation_parameters: GenerationParameters,
+        original_message_link: String,
     ) -> anyhow::Result<Self> {
         let shutdown = Arc::new(AtomicBool::new(false));
         let fitness_store = Arc::new(FitnessStore::new(shutdown.clone()));
@@ -38,30 +48,31 @@ impl Session {
         let simulation_thread = std::thread::spawn({
             let fitness_store = fitness_store.clone();
             let shutdown = shutdown.clone();
-            let tags = tags.clone();
+            let tags = generation_parameters.tags.clone();
             move || simulation::thread(fitness_store, shutdown, tags, result_tx)
         });
 
-        let message_task = tokio::task::spawn(message_task::task(
+        let message_task = tokio::task::spawn(message_task::task(message_task::Parameters {
             http,
             channel_id,
-            client,
-            parameters.clone(),
-            fitness_store.clone(),
-            shutdown.clone(),
-            tags.clone(),
+            shutdown: shutdown.clone(),
+            fitness_store: fitness_store.clone(),
             result_rx,
+            to_exilent_enabled: to_exilent_channel_id.is_some(),
             hide_prompt,
-        ));
+            client,
+            generation_parameters: generation_parameters.clone(),
+        }));
 
         Ok(Self {
             _simulation_thread: simulation_thread,
             _message_task: message_task,
             fitness_store,
             shutdown,
-            tags,
             hide_prompt,
-            parameters,
+            generation_parameters,
+            to_exilent_channel_id,
+            original_message_link,
         })
     }
 

@@ -1,5 +1,6 @@
 // List of keywords extracted from cadaeic's prompt generator:
 // https://perchance.org/image-synthesis-prompt-generator
+// and from other perchance generators
 beggar
 busker
 farmer
@@ -64,6 +65,36 @@ scholar
 explorer
 pioneer
 sailor
+agent
+teacher
+baker
+chemist
+driver
+cashier
+caster
+chef
+dancer
+musician
+cook
+counselor
+courier
+reporter
+artist
+dentist
+doctor
+detective
+director
+therapist
+clerk
+fisher
+hunter
+judge
+lawyer
+messenger
+orderly
+priest
+rancher
+tailor
 cat
 kitten
 dog
@@ -80,6 +111,19 @@ sheep
 goat
 lizard
 snake
+lion
+tiger
+bear
+owl
+wolf
+rabbit
+mouse
+pig
+fox
+feral
+domestic
+flock
+herd
 ai
 android
 robot
@@ -273,6 +317,35 @@ bush
 taiga
 ocean
 shallows
+volcano
+molten
+seething
+active
+light particles
+stars
+starry sky
+moss
+waterfall
+skyline
+floating city
+giant tree
+flooded cavern
+light rays
+architecture
+sunbeam
+spire
+canal
+clouds
+cloudy sky
+storm
+rain
+sunny
+windy
+gusty
+overcast
+glowing
+mecha
+neon signs
 pond
 savannah
 seascape
@@ -280,6 +353,14 @@ shoreline
 steppe
 treetops
 tundra
+trees
+plants
+grass
+flowers
+outback
+outlands
+flower field
+overgrown
 underwater
 wasteland
 woods
@@ -296,6 +377,73 @@ airport
 shop
 market
 plaza
+armory
+attic
+auditorium
+backroom
+ballroom
+bedroom
+basement
+boudoir
+cafe
+cafeteria
+cellar
+alcove
+assembly
+chapel
+conservatory
+office
+darkroom
+den
+dormitory
+engine
+foyer
+gym
+garage
+hotel
+kitchen
+laundry
+lounge
+parlor
+playroom
+school
+studio
+study
+sunroom
+throne room
+moat
+emergency
+map
+museum
+theatre
+opera
+casino
+circus
+park
+zoo
+bar
+pub
+speakeasy
+cemetary
+graveyard
+farm
+field
+lighthouse
+pool
+vineyard
+landmark
+bridge
+harbor
+port
+docks
+sports ground
+court
+playground
+lookout
+nature
+preserve
+neighbourhood
+workshop
 apartment building
 ship
 airplane
@@ -642,7 +790,6 @@ fisheye lens
 fractalism
 futuresynth
 glitch art
-glowing
 gothic
 gothic art
 graffiti
@@ -1249,7 +1396,6 @@ persian blue
 plum
 prussian blue
 puce
-raimbow sprimkle
 raspberry
 red-violet
 rose
@@ -1326,7 +1472,6 @@ blood
 soul
 true
 wind
-storm
 life
 pain
 span
@@ -1391,7 +1536,6 @@ run
 break
 bring
 book
-ass
 dice
 dance
 watch
@@ -1464,10 +1608,8 @@ time
 chief
 ghost
 lore
-rain
 earth
 robo
-mecha
 mega
 ultra
 might
@@ -1478,7 +1620,6 @@ splitter
 hell
 cell
 protein
-fat
 shell
 omen
 doom

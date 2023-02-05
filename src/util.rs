@@ -1,4 +1,4 @@
-use anyhow::Context;
+use futures::Future;
 use serenity::{
     async_trait,
     http::Http,
@@ -12,7 +12,7 @@ use serenity::{
                 modal::ModalSubmitInteraction,
                 InteractionResponseType,
             },
-            ChannelId, Message,
+            ChannelId, GuildId, Message, PartialChannel,
         },
         user::User,
     },
@@ -75,21 +75,23 @@ pub fn value_to_attachment_url(v: &CommandDataOptionValue) -> Option<String> {
     }
 }
 
-pub fn get_image_url(aci: &ApplicationCommandInteraction) -> anyhow::Result<String> {
-    let image_attachment_url = get_value(&aci.data.options, constant::value::IMAGE_ATTACHMENT)
-        .and_then(value_to_attachment_url);
-
-    let image_url =
-        get_value(&aci.data.options, constant::value::IMAGE_URL).and_then(value_to_string);
-
-    image_attachment_url
-        .or(image_url)
-        .context("expected an image to be passed in")
+pub fn value_to_channel(v: &CommandDataOptionValue) -> Option<PartialChannel> {
+    match v {
+        CommandDataOptionValue::Channel(v) => Some(v.clone()),
+        _ => None,
+    }
 }
 
-pub fn generate_chunked_strings(
-    strings: impl Iterator<Item = String>,
+pub fn get_image_url(options: &[CommandDataOption]) -> Option<String> {
+    get_value(options, constant::value::IMAGE_ATTACHMENT)
+        .and_then(value_to_attachment_url)
+        .or_else(|| get_value(options, constant::value::IMAGE_URL).and_then(value_to_string))
+}
+
+pub fn generate_chunked_strings<'a>(
+    strings: impl Iterator<Item = &'a str>,
     threshold: usize,
+    separator: &str,
 ) -> Vec<String> {
     let mut texts = vec![String::new()];
     for string in strings {
@@ -98,20 +100,48 @@ pub fn generate_chunked_strings(
         }
         if let Some(last) = texts.last_mut() {
             if !last.is_empty() {
-                *last += ", ";
+                *last += separator;
             }
-            *last += &string;
+            *last += string;
         }
     }
     texts
+}
+
+/// assumes an interaction response has already been created
+pub async fn chunked_response(
+    http: &Http,
+    cmd: &dyn DiscordInteraction,
+    strings: impl Iterator<Item = &str>,
+    separator: &str,
+) -> anyhow::Result<()> {
+    let texts = generate_chunked_strings(strings, 1900, separator);
+    cmd.edit(http, texts.first().map(|s| s.as_str()).unwrap_or_default())
+        .await?;
+
+    for remainder in texts.iter().skip(1) {
+        cmd.channel_id()
+            .send_message(http, |msg| msg.content(remainder))
+            .await?;
+    }
+
+    Ok(())
 }
 
 pub fn find_model_by_hash(models: &[sd::Model], model_hash: &str) -> Option<(usize, sd::Model)> {
     models
         .iter()
         .enumerate()
-        .find(|(_, m)| extract_last_bracketed_string(&m.title) == Some(model_hash))
+        .find(|(_, m)| m.hash_short.as_deref() == Some(model_hash))
         .map(|(idx, model)| (idx, model.clone()))
+}
+
+pub fn model_hash_to_name(models: &[sd::Model], model_hash: &str) -> String {
+    find_model_by_hash(models, model_hash)
+        .as_ref()
+        .map(|p| p.1.name.as_str())
+        .unwrap_or(model_hash)
+        .to_string()
 }
 
 pub fn encode_image_to_png_bytes(image: image::DynamicImage) -> anyhow::Result<Vec<u8>> {
@@ -131,7 +161,7 @@ pub fn fixup_base_generation_request(params: &mut sd::BaseGenerationRequest) {
     }
 }
 
-pub fn extract_last_bracketed_string(string: &str) -> Option<&str> {
+fn extract_last_bracketed_string(string: &str) -> Option<&str> {
     let left = string.rfind('[')?;
     let right = string.rfind(']')?;
     (left < right).then_some(&string[left + 1..right])
@@ -157,7 +187,7 @@ fn prepend_keyword_if_necessary_unchecked(prompt: &str, model_name: &str) -> Str
         if prompt.contains(keyword) {
             prompt.to_string()
         } else {
-            format!("{}, {}", keyword, prompt)
+            format!("{keyword}, {prompt}")
         }
     } else {
         prompt.to_string()
@@ -246,8 +276,10 @@ pub trait DiscordInteraction: Send + Sync {
     async fn create(&self, http: &Http, message: &str) -> anyhow::Result<()>;
     async fn get_interaction_message(&self, http: &Http) -> anyhow::Result<Message>;
     async fn edit(&self, http: &Http, message: &str) -> anyhow::Result<()>;
+    async fn create_or_edit(&self, http: &Http, message: &str) -> anyhow::Result<()>;
 
     fn channel_id(&self) -> ChannelId;
+    fn guild_id(&self) -> Option<GuildId>;
     fn message(&self) -> Option<&Message>;
     fn user(&self) -> &User;
 }
@@ -274,9 +306,21 @@ macro_rules! implement_interaction {
                     .edit(http, |m| m.content(message))
                     .await?)
             }
+            async fn create_or_edit(&self, http: &Http, message: &str) -> anyhow::Result<()> {
+                Ok(
+                    if let Ok(mut msg) = self.get_interaction_message(http).await {
+                        msg.edit(http, |m| m.content(message)).await?
+                    } else {
+                        self.create(http, message).await?
+                    },
+                )
+            }
 
             fn channel_id(&self) -> ChannelId {
                 self.channel_id
+            }
+            fn guild_id(&self) -> Option<GuildId> {
+                self.guild_id
             }
             fn user(&self) -> &User {
                 &self.user
@@ -305,6 +349,20 @@ macro_rules! interaction_message {
 implement_interaction!(ApplicationCommandInteraction);
 implement_interaction!(MessageComponentInteraction);
 implement_interaction!(ModalSubmitInteraction);
+
+/// Runs the [body] and edits the interaction response if an error occurs.
+pub async fn run_and_report_error(
+    interaction: &dyn DiscordInteraction,
+    http: &Http,
+    body: impl Future<Output = anyhow::Result<()>>,
+) {
+    if let Err(err) = body.await {
+        interaction
+            .create_or_edit(http, &format!("Error: {err}"))
+            .await
+            .unwrap();
+    }
+}
 
 macro_rules! create_modal_interaction_response {
     ($title:expr, $custom_id:expr, $generation:ident) => {

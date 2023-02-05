@@ -3,7 +3,7 @@ use anyhow::Context;
 use itertools::Itertools;
 use parking_lot::Mutex;
 use rusqlite::OptionalExtension;
-use serenity::model::id::UserId;
+use serenity::model::id::{GuildId, UserId};
 use stable_diffusion_a1111_webui_client::Sampler;
 use std::collections::HashMap;
 
@@ -35,6 +35,7 @@ impl Store {
 
                 user_id             TEXT NOT NULL,
                 timestamp	        TEXT NOT NULL,
+                guild_id            TEXT NOT NULL,
 
                 -- img2img specific fields
                 init_image          BLOB,
@@ -50,6 +51,7 @@ impl Store {
                 id	            INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id	        TEXT NOT NULL,
                 timestamp	    TEXT NOT NULL,
+                guild_id        TEXT NOT NULL,
 
                 generation_id	INTEGER,
                 url	            TEXT,
@@ -65,12 +67,12 @@ impl Store {
         connection.execute(
             r"
             CREATE TABLE IF NOT EXISTS preset (
-                id	            INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id	        TEXT NOT NULL,
+                id	                INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id	            TEXT NOT NULL,
                 name                TEXT NOT NULL,
 
-                prefix_prompt	    TEXT,
-                suffix_prompt,      TEXT,
+                prompt_prefix	    TEXT,
+                prompt_suffix       TEXT,
                 negative_prompt	    TEXT,
                 width	            INTEGER,
                 height	            INTEGER,
@@ -83,7 +85,7 @@ impl Store {
                 denoising_strength  REAL,
 
                 -- img2img specific fields
-                resize_mode         TEXT,
+                resize_mode         TEXT
             ) STRICT;
         ",
             (),
@@ -99,10 +101,10 @@ impl Store {
             r"
             INSERT INTO generation
                 (prompt, negative_prompt, seed, width, height, cfg_scale, steps, tiling,
-                 restore_faces, sampler, model_hash, image, user_id, timestamp, denoising_strength,
+                 restore_faces, sampler, model_hash, image, user_id, timestamp, guild_id, denoising_strength,
                  init_image, resize_mode, init_url)
             VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ",
             rusqlite::params![
                 g.prompt,
@@ -119,6 +121,7 @@ impl Store {
                 g.image,
                 g.user_id.as_u64().to_string(),
                 g.timestamp,
+                g.guild_id.as_u64().to_string(),
                 g.denoising_strength,
                 g.image_generation
                     .as_ref()
@@ -151,8 +154,12 @@ impl Store {
     pub fn get_last_generation_for_user(
         &self,
         user_id: UserId,
+        guild_id: GuildId,
     ) -> anyhow::Result<Option<Generation>> {
-        self.get_generation_with_predicate(r"user_id = ?", [user_id.as_u64().to_string()])
+        self.get_generation_with_predicate(
+            r"user_id = ? AND guild_id = ?",
+            [user_id.as_u64().to_string(), guild_id.as_u64().to_string()],
+        )
     }
 
     pub fn insert_interrogation(&self, interrogation: Interrogation) -> anyhow::Result<i64> {
@@ -161,13 +168,14 @@ impl Store {
         db.execute(
             r"
             INSERT INTO interrogation
-                (user_id, timestamp, generation_id, url, result, interrogator)
+                (user_id, timestamp, guild_id, generation_id, url, result, interrogator)
             VALUES
-                (?, ?, ?, ?, ?, ?)
+                (?, ?, ?, ?, ?, ?, ?)
             ",
             (
                 i.user_id.as_u64().to_string(),
                 chrono::Local::now(),
+                i.guild_id.as_u64().to_string(),
                 i.source.generation_id(),
                 i.source.url(),
                 i.result,
@@ -181,11 +189,11 @@ impl Store {
     pub fn get_interrogation(&self, key: i64) -> anyhow::Result<Option<Interrogation>> {
         let db = &mut *self.0.lock();
         let Some((
-            user_id, generation_id, url, result, interrogator
+            user_id, generation_id, guild_id, url, result, interrogator
         )) = db.query_row(
                 r"
                 SELECT
-                    user_id, generation_id, url, result, interrogator
+                    user_id, generation_id, guild_id, url, result, interrogator
                 FROM
                     interrogation
                 WHERE
@@ -201,6 +209,7 @@ impl Store {
         Ok(Some(Interrogation::from_db(
             user_id,
             generation_id,
+            guild_id,
             url,
             result,
             interrogator,
@@ -213,7 +222,7 @@ impl Store {
         db.execute(
             r"
             INSERT INTO preset
-                (user_id, name, prefix_prompt, suffix_prompt, negative_prompt, width, height,
+                (user_id, name, prompt_prefix, prompt_suffix, negative_prompt, width, height,
                  cfg_scale, steps, tiling, restore_faces, sampler, model_hash,
                  denoising_strength, resize_mode)
             VALUES
@@ -222,8 +231,8 @@ impl Store {
             rusqlite::params![
                 p.user_id.as_u64().to_string(),
                 p.name,
-                p.prefix_prompt,
-                p.suffix_prompt,
+                p.prompt_prefix,
+                p.prompt_suffix,
                 p.negative_prompt,
                 p.width,
                 p.height,
@@ -244,13 +253,13 @@ impl Store {
     pub fn get_preset(&self, user_id: UserId, name: String) -> anyhow::Result<Option<Preset>> {
         let db = &mut *self.0.lock();
         let Some((
-            id, prefix_prompt, suffix_prompt, negative_prompt, width, height,
+            id, prompt_prefix, prompt_suffix, negative_prompt, width, height,
                  cfg_scale, steps, tiling, restore_faces, sampler, model_hash,
                  denoising_strength, resize_mode
         )): Option<(Option<i64>, Option<String>, Option<String>, Option<String>, Option<u32>, Option<u32>, Option<f32>, Option<u32>, Option<bool>, Option<bool>, Option<String>, Option<String>, Option<f32>, Option<String>)> = db.query_row(
             r"
             SELECT
-                id, prefix_prompt, suffix_prompt, negative_prompt, width, height,
+                id, prompt_prefix, prompt_suffix, negative_prompt, width, height,
             cfg_scale, steps, tiling, restore_faces, sampler, model_hash,
             denoising_strength, resize_mode
             FROM
@@ -268,8 +277,8 @@ impl Store {
             id,
             user_id,
             name,
-            prefix_prompt,
-            suffix_prompt,
+            prompt_prefix,
+            prompt_suffix,
             negative_prompt,
             width,
             height,
@@ -284,18 +293,25 @@ impl Store {
         }))
     }
 
-    pub fn get_model_usage_counts(&self) -> anyhow::Result<HashMap<UserId, Vec<(String, u64)>>> {
+    pub fn get_model_usage_counts(
+        &self,
+        guild_id: GuildId,
+    ) -> anyhow::Result<HashMap<UserId, Vec<(String, u64)>>> {
         self.0
             .lock()
             .prepare(
                 r#"
                 SELECT user_id, model_hash, COUNT(*) AS count
                 FROM generation
+                WHERE guild_id = :guild_id
                 GROUP BY user_id, model_hash
                 ORDER BY user_id, count DESC
                 "#,
             )?
-            .query_map([], |row| row.try_into())?
+            .query_map(
+                &[(":guild_id", guild_id.as_u64().to_string().as_str())],
+                |row| row.try_into(),
+            )?
             .flat_map(Result::ok)
             .group_by(|(uid, _, _): &(String, String, i64)| uid.clone())
             .into_iter()
@@ -337,6 +353,7 @@ pub struct Generation {
     pub image_url: Option<String>,
     pub timestamp: chrono::DateTime<chrono::Local>,
     pub user_id: UserId,
+    pub guild_id: GuildId,
     pub denoising_strength: f32,
     pub image_generation: Option<ImageGeneration>,
 }
@@ -346,11 +363,7 @@ impl Generation {
         let commands = &Configuration::get().commands;
         format!(
             "`/{} {}:{}{} {}:{} {}:{} {}:{} {}:{} {}:{} {}:{} {}:{} {}:{} {}:{}{}{}`",
-            if self.image_generation.is_some() {
-                &commands.paintover
-            } else {
-                &commands.paint
-            },
+            &commands.paint,
             c::value::PROMPT,
             self.prompt,
             self.negative_prompt
@@ -452,10 +465,15 @@ impl GenerationRequest {
         }
     }
 
-    pub fn generate(&self, client: &sd::Client) -> sd::Result<sd::GenerationTask> {
+    pub fn generate(
+        &self,
+        client: &sd::Client,
+    ) -> tokio::task::JoinHandle<sd::Result<sd::GenerationResult>> {
         match self {
-            GenerationRequest::Text(r) => client.generate_from_text(r),
-            GenerationRequest::Image(r) => client.generate_from_image_and_text(r),
+            GenerationRequest::Text(r) => tokio::task::spawn(client.generate_from_text(r)),
+            GenerationRequest::Image(r) => {
+                tokio::task::spawn(client.generate_from_image_and_text(r))
+            }
         }
     }
 }
@@ -484,6 +502,7 @@ impl InterrogationSource {
 #[derive(Debug, Clone)]
 pub struct Interrogation {
     pub user_id: UserId,
+    pub guild_id: GuildId,
     pub source: InterrogationSource,
     pub result: String,
     pub interrogator: sd::Interrogator,
@@ -492,6 +511,7 @@ impl Interrogation {
     pub fn from_db(
         user_id: String,
         generation_id: Option<i64>,
+        guild_id: String,
         url: Option<String>,
         result: String,
         interrogator: String,
@@ -510,6 +530,7 @@ impl Interrogation {
 
         Ok(Self {
             user_id: UserId(user_id.parse()?),
+            guild_id: GuildId(guild_id.parse()?),
             source,
             result,
             interrogator,
@@ -523,8 +544,8 @@ pub struct Preset {
     pub user_id: UserId,
     pub name: String,
 
-    pub prefix_prompt: Option<String>,
-    pub suffix_prompt: Option<String>,
+    pub prompt_prefix: Option<String>,
+    pub prompt_suffix: Option<String>,
     pub negative_prompt: Option<String>,
     pub width: Option<u32>,
     pub height: Option<u32>,
@@ -544,8 +565,8 @@ impl Preset {
     //         "`/{} {}:{:?}{:?}{} {}:{:?} {}:{:?} {}:{:?} {}:{:?} {}:{:?} {}:{:?} {}:{:?} {}:{:?} {}:{:?}`",
     //         c::command::PRESET,
     //         c::value::PROMPT,
-    //         self.prefix_prompt,
-    //         self.suffix_prompt,
+    //         self.prompt_prefix,
+    //         self.prompt_suffix,
     //         self.negative_prompt
     //             .as_ref()
     //             .map(|s| format!(" {}:{s}", c::value::NEGATIVE_PROMPT))
@@ -615,6 +636,7 @@ impl Store {
             init_url,
             image_url,
             id,
+            guild_id,
         )) = db
             .query_row(
                 &format!(
@@ -622,15 +644,15 @@ impl Store {
                     SELECT
                         prompt, negative_prompt, seed, width, height, cfg_scale, steps, tiling,
                         restore_faces, sampler, model_hash, image, user_id, timestamp,
-                        denoising_strength, init_image, resize_mode, init_url, image_url, id
+                        denoising_strength, init_image, resize_mode, init_url, image_url, id,
+                        guild_id
                     FROM
                         generation
                     WHERE
-                        {}
+                        {predicate}
                     ORDER BY timestamp
                     DESC LIMIT 1
-                    ",
-                    predicate
+                    "
                 ),
                 params,
                 |r| {
@@ -654,6 +676,7 @@ impl Store {
                     let init_url: Option<String> = r.get(17)?;
                     let image_url: Option<String> = r.get(18)?;
                     let id: i64 = r.get(19)?;
+                    let guild_id: String = r.get(20)?;
 
                     Ok((
                         prompt,
@@ -676,6 +699,7 @@ impl Store {
                         init_url,
                         image_url,
                         id,
+                        guild_id
                     ))
                 },
             )
@@ -700,6 +724,7 @@ impl Store {
             image_url,
             timestamp,
             user_id: UserId(user_id.parse()?),
+            guild_id: GuildId(guild_id.parse()?),
             denoising_strength,
             image_generation: init_image
                 .zip(resize_mode)

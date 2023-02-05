@@ -376,6 +376,7 @@ dependencies = [
  "stable-diffusion-a1111-webui-client",
  "tokio",
  "toml",
+ "walkdir",
 ]
 
 [[package]]
@@ -1436,6 +1437,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4501abdff3ae82a1c1b477a17252eb69cee9e66eb915c1abaa4f44d873df9f09"
 
 [[package]]
+name = "same-file"
+version = "1.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
+dependencies = [
+ "winapi-util",
+]
+
+[[package]]
 name = "schannel"
 version = "0.1.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1641,7 +1651,7 @@ dependencies = [
 [[package]]
 name = "stable-diffusion-a1111-webui-client"
 version = "0.1.0"
-source = "git+https://github.com/philpax/stable-diffusion-a1111-webui-client.git#97d41a4a0e49e14e90aed9859d00a52651bbdaf8"
+source = "git+https://github.com/philpax/stable-diffusion-a1111-webui-client.git?branch=main#45c43f300baa5cdf2953f423148799873a192690"
 dependencies = [
  "base64",
  "chrono",
@@ -2004,6 +2014,17 @@ name = "version_check"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
+
+[[package]]
+name = "walkdir"
+version = "2.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "808cf2735cd4b6866113f648b791c6adc5714537bc222d9347bb203386ffda56"
+dependencies = [
+ "same-file",
+ "winapi",
+ "winapi-util",
+]
 
 [[package]]
 name = "want"

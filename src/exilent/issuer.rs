@@ -7,68 +7,85 @@ use crate::{
 use anyhow::Context;
 use serenity::{
     http::Http,
-    model::prelude::{component, ReactionType},
+    model::prelude::{component, ChannelId, ReactionType},
     prelude::Mentionable,
 };
 use stable_diffusion_a1111_webui_client as sd;
 use std::time::Duration;
 
 pub async fn generation_task(
-    task: sd::GenerationTask,
-    models: &[sd::Model],
+    (client, models): (&sd::Client, &[sd::Model]),
+    task: tokio::task::JoinHandle<sd::Result<sd::GenerationResult>>,
     store: &Store,
     http: &Http,
-    interaction: &dyn DiscordInteraction,
+    (interaction, result_channel_override): (&dyn DiscordInteraction, Option<ChannelId>),
     (prompt, negative_prompt): (&str, Option<&str>),
     image_generation: Option<store::ImageGeneration>,
 ) -> anyhow::Result<()> {
+    // How many seconds to subtract from the time of job issuance to accommodate for
+    // early starts
+    const START_TIME_SLACK: i64 = 2;
+
     // generate and update progress
+    let mut max_progress_factor = 0.0;
+
+    let start_time = chrono::Local::now() - chrono::Duration::seconds(START_TIME_SLACK);
+
     loop {
-        let progress = task.progress().await?;
-        let image_bytes = progress
-            .current_image
-            .as_ref()
-            .map(|i| {
-                util::encode_image_to_png_bytes(i.resize(
-                    ((i.width() as f32) * Configuration::get().progress.scale_factor) as u32,
-                    ((i.height() as f32) * Configuration::get().progress.scale_factor) as u32,
-                    image::imageops::FilterType::Nearest,
-                ))
-            })
-            .transpose()?;
+        let progress = client.progress().await?;
 
-        interaction
-            .get_interaction_message(http)
-            .await?
-            .edit(http, |m| {
-                m.content(format!(
-                    "`{}`{}{}: {:.02}% complete. ({:.02} seconds remaining)",
-                    prompt,
-                    negative_prompt
-                        .map(|s| format!(" - `{s}`"))
-                        .unwrap_or_default(),
-                    image_generation
-                        .as_ref()
-                        .map(|ig| format!(" for {}", ig.init_url))
-                        .unwrap_or_default(),
-                    progress.progress_factor * 100.0,
-                    progress.eta_seconds
-                ));
+        // Only update the message if the ongoing job was started after
+        // this job was issued
+        if progress.job_timestamp.unwrap_or(start_time) >= start_time {
+            let image_bytes = progress
+                .current_image
+                .as_ref()
+                .map(|i| {
+                    util::encode_image_to_png_bytes(i.resize(
+                        ((i.width() as f32) * Configuration::get().progress.scale_factor) as u32,
+                        ((i.height() as f32) * Configuration::get().progress.scale_factor) as u32,
+                        image::imageops::FilterType::Nearest,
+                    ))
+                })
+                .transpose()?;
 
-                if let Some(image_bytes) = &image_bytes {
-                    if let Some(a) = m.0.get_mut("attachments").and_then(|e| e.as_array_mut()) {
-                        a.clear();
+            max_progress_factor = progress.progress_factor.max(max_progress_factor);
+
+            interaction
+                .get_interaction_message(http)
+                .await?
+                .edit(http, |m| {
+                    m.content(format!(
+                        "`{}`{}{}: {:.02}% complete. ({:.02} seconds remaining)",
+                        prompt,
+                        negative_prompt
+                            .filter(|s| !s.is_empty())
+                            .map(|s| format!(" - `{s}`"))
+                            .unwrap_or_default(),
+                        image_generation
+                            .as_ref()
+                            .map(|ig| format!(" for {}", ig.init_url))
+                            .unwrap_or_default(),
+                        max_progress_factor * 100.0,
+                        progress.eta_seconds
+                    ));
+
+                    if let Some(image_bytes) = &image_bytes {
+                        if let Some(a) = m.0.get_mut("attachments").and_then(|e| e.as_array_mut()) {
+                            a.clear();
+                        }
+                        m.attachment((image_bytes.as_slice(), "progress.png"));
                     }
-                    m.attachment((image_bytes.as_slice(), "progress.png"));
-                }
 
-                m
-            })
-            .await?;
+                    m
+                })
+                .await?;
+        }
 
-        if progress.is_finished() {
+        if task.is_finished() {
             break;
         }
+
         tokio::time::sleep(Duration::from_millis(
             Configuration::get().progress.update_ms,
         ))
@@ -76,17 +93,12 @@ pub async fn generation_task(
     }
 
     // retrieve result
-    let result = task.block().await?;
+    let result = task.await??;
     let images = result
-        .images
+        .pngs
         .into_iter()
         .enumerate()
-        .map(|(idx, image)| {
-            Ok((
-                format!("image_{idx}.png"),
-                util::encode_image_to_png_bytes(image)?,
-            ))
-        })
+        .map(|(idx, image)| Ok((format!("image_{idx}.png"), image)))
         .collect::<anyhow::Result<Vec<_>>>()?;
 
     // send images
@@ -99,6 +111,7 @@ pub async fn generation_task(
                     "`{}`{}: Uploading {}/{}...",
                     prompt,
                     negative_prompt
+                        .filter(|s| !s.is_empty())
                         .map(|s| format!(" - `{s}`"))
                         .unwrap_or_default(),
                     idx + 1,
@@ -126,6 +139,7 @@ pub async fn generation_task(
             image_url: None,
             timestamp: result.info.job_timestamp,
             user_id: interaction.user().id,
+            guild_id: interaction.guild_id().context("no guild id")?,
             denoising_strength: result.info.denoising_strength,
             image_generation: image_generation.clone(),
         };
@@ -136,8 +150,8 @@ pub async fn generation_task(
         );
         let store_key = store.insert_generation(generation)?;
 
-        let final_message = interaction
-            .channel_id()
+        let final_message = result_channel_override
+            .unwrap_or_else(|| interaction.channel_id())
             .send_files(&http, [(bytes.as_slice(), filename.as_str())], |m| {
                 m.content(message).components(|c| {
                     let e = &Configuration::get().emojis;
@@ -187,8 +201,10 @@ pub async fn generation_task(
                     })
                 });
 
-                if let Some(message) = interaction.message() {
-                    m.reference_message(message);
+                if result_channel_override.is_none() {
+                    if let Some(message) = interaction.message() {
+                        m.reference_message(message);
+                    }
                 }
 
                 m
@@ -239,6 +255,7 @@ pub async fn interrogate_task(
 
     let store_key = store.insert_interrogation(store::Interrogation {
         user_id: interaction.user().id,
+        guild_id: interaction.guild_id().context("no guild id")?,
         source: source.clone(),
         result: result.clone(),
         interrogator,

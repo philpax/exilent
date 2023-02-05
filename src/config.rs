@@ -27,18 +27,26 @@ impl Default for Authentication {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Default)]
+pub struct Models {
+    #[serde(default)]
+    pub allowlist: HashSet<String>,
+    #[serde(default)]
+    pub blocklist: HashSet<String>,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct General {
-    pub deepdanbooru_tag_whitelist: Option<PathBuf>,
+    pub deepdanbooru_tag_allowlist: Option<PathBuf>,
     pub automatically_prepend_keyword: bool,
-    pub hide_models: HashSet<String>,
+    pub models: Models,
 }
 impl Default for General {
     fn default() -> Self {
         Self {
-            deepdanbooru_tag_whitelist: Some(constant::resource::danbooru_sanitized_path()),
+            deepdanbooru_tag_allowlist: Some(constant::resource::danbooru_sanitized_path()),
             automatically_prepend_keyword: true,
-            hide_models: HashSet::new(),
+            models: Default::default(),
         }
     }
 }
@@ -46,8 +54,6 @@ impl Default for General {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Commands {
     pub paint: String,
-    pub paintover: String,
-    pub paintagain: String,
     pub postprocess: String,
     pub interrogate: String,
     pub exilent: String,
@@ -59,8 +65,6 @@ impl Commands {
     pub fn all(&self) -> HashSet<&str> {
         HashSet::from_iter([
             self.paint.as_str(),
-            self.paintover.as_str(),
-            self.paintagain.as_str(),
             self.postprocess.as_str(),
             self.interrogate.as_str(),
             self.exilent.as_str(),
@@ -73,8 +77,6 @@ impl Default for Commands {
     fn default() -> Self {
         Self {
             paint: "paint".to_string(),
-            paintover: "paintover".to_string(),
-            paintagain: "paintagain".to_string(),
             postprocess: "postprocess".to_string(),
             interrogate: "interrogate".to_string(),
             exilent: "exilent".to_string(),
@@ -187,7 +189,7 @@ impl Configuration {
     }
 
     pub fn deepdanbooru_tag_whitelist(&self) -> Option<&Tags> {
-        self.runtime.deepdanbooru_tag_whitelist.as_ref()
+        self.runtime.deepdanbooru_tag_allowlist.as_ref()
     }
 
     pub fn tags(&self) -> &HashMap<String, Tags> {
@@ -196,7 +198,7 @@ impl Configuration {
 
     fn load() -> anyhow::Result<Self> {
         let mut config = if let Ok(file) = std::fs::read_to_string(Self::FILENAME) {
-            toml::from_str(&file)?
+            toml::from_str(&file).context("failed to load config")?
         } else {
             let config = Self::default();
             config.save()?;
@@ -204,9 +206,9 @@ impl Configuration {
         };
 
         config.runtime = ConfigurationRuntime {
-            deepdanbooru_tag_whitelist: config
+            deepdanbooru_tag_allowlist: config
                 .general
-                .deepdanbooru_tag_whitelist
+                .deepdanbooru_tag_allowlist
                 .as_deref()
                 .map(read_tags_from_file)
                 .transpose()?,
@@ -232,7 +234,7 @@ impl Configuration {
     fn save(&self) -> anyhow::Result<()> {
         Ok(std::fs::write(
             Self::FILENAME,
-            &toml::to_string_pretty(self)?,
+            toml::to_string_pretty(self)?,
         )?)
     }
 }
@@ -242,7 +244,7 @@ pub type Tags = HashSet<String>;
 
 #[derive(Debug, Default)]
 struct ConfigurationRuntime {
-    pub deepdanbooru_tag_whitelist: Option<Tags>,
+    pub deepdanbooru_tag_allowlist: Option<Tags>,
     pub tags: HashMap<String, Tags>,
 }
 
