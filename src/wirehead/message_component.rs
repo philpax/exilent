@@ -51,31 +51,23 @@ pub async fn to_exilent(
         .await?;
 
         let GenerationParameters {
-            parameters,
+            mut parameters,
             tags,
             prefix,
             suffix,
         } = parameters;
 
-        let base = {
-            let mut base = sd::BaseGenerationRequest {
-                prompt: genome.as_text(&tags, prefix.as_deref(), suffix.as_deref()),
-                ..parameters.as_base_generation_request()
-            };
-            util::fixup_base_generation_request(&mut base);
+        let (prompt, negative_prompt) = {
+            let base = parameters.base_generation_mut();
+            base.prompt = genome.as_text(&tags, prefix.as_deref(), suffix.as_deref());
             base.seed = Some(seed);
-            base
+
+            (base.prompt.clone(), base.negative_prompt.clone())
         };
 
-        let (prompt, negative_prompt) = (base.prompt.clone(), base.negative_prompt.clone());
         exilent::issuer::generation_task(
             (client, models),
-            tokio::task::spawn(
-                client.generate_from_text(&sd::TextToImageGenerationRequest {
-                    base,
-                    ..Default::default()
-                }),
-            ),
+            tokio::task::spawn(parameters.generate(client)),
             store,
             http,
             (&mci, to_exilent_channel_id),

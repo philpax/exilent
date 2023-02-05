@@ -260,11 +260,7 @@ impl Generation {
         let commands = &Configuration::get().commands;
         format!(
             "`/{} {}:{}{} {}:{} {}:{} {}:{} {}:{} {}:{} {}:{} {}:{} {}:{} {}:{}{}{}`",
-            if self.image_generation.is_some() {
-                &commands.paintover
-            } else {
-                &commands.paint
-            },
+            &commands.paint,
             c::value::PROMPT,
             self.prompt,
             self.negative_prompt

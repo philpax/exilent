@@ -2,7 +2,9 @@ use super::{
     simulation::{AsPhenotype, FitnessStore, TextGenome},
     GenerationParameters,
 };
-use crate::{constant, custom_id as cid, util};
+use crate::{
+    command::GenerationParameters as CommandGenerationParameters, constant, custom_id as cid, util,
+};
 use serenity::{
     http::Http,
     model::prelude::{component::ButtonStyle, AttachmentType, ChannelId},
@@ -57,21 +59,16 @@ pub async fn task(parameters: Parameters) -> anyhow::Result<()> {
             break;
         }
 
-        fn to_attachment_type(value: &(Vec<u8>, i64)) -> AttachmentType {
+        fn to_attachment_type(value: &(Vec<u8>, Option<i64>)) -> AttachmentType {
             AttachmentType::Bytes {
                 data: Cow::Borrowed(value.0.as_slice()),
-                filename: format!("output_{}.png", value.1),
+                filename: format!("output_{}.png", value.1.unwrap_or_default()),
             }
         }
 
         if let Ok(genome) = result_rx.try_recv() {
             let prompt = genome.as_text(&tags, prefix.as_deref(), suffix.as_deref());
-            let images = generate(
-                &client,
-                parameters.as_base_generation_request(),
-                prompt.clone(),
-            )
-            .await?;
+            let images = generate(&client, parameters.clone(), prompt.clone()).await?;
 
             channel_id
                 .send_files(http.as_ref(), images.iter().map(to_attachment_type), |m| {
@@ -85,15 +82,18 @@ pub async fn task(parameters: Parameters) -> anyhow::Result<()> {
                     ))
                     .components(|c| {
                         if to_exilent_enabled {
-                            c.create_action_row(|row| {
-                                row.create_button(|b| {
-                                    b.custom_id(
-                                        cid::WireheadValue::ToExilent.to_id(genome, images[0].1),
-                                    )
-                                    .label("To Exilent")
-                                    .style(ButtonStyle::Primary)
-                                })
-                            })
+                            match images.get(0).and_then(|i| i.1) {
+                                Some(seed) => c.create_action_row(|row| {
+                                    row.create_button(|b| {
+                                        b.custom_id(
+                                            cid::WireheadValue::ToExilent.to_id(genome, seed),
+                                        )
+                                        .label("To Exilent")
+                                        .style(ButtonStyle::Primary)
+                                    })
+                                }),
+                                None => c,
+                            }
                         } else {
                             c
                         }
@@ -107,45 +107,53 @@ pub async fn task(parameters: Parameters) -> anyhow::Result<()> {
         for genome in pending_requests {
             let images = generate(
                 &client,
-                parameters.as_base_generation_request(),
+                parameters.clone(),
                 genome.as_text(&tags, prefix.as_deref(), suffix.as_deref()),
             )
             .await?;
 
-            let seed = images[0].1;
-
             channel_id
                 .send_files(http.as_ref(), images.iter().map(to_attachment_type), |m| {
-                    m.components(|mc| {
-                        mc.create_action_row(|row| {
-                            let g = &genome;
-                            row.create_button(|b| {
-                                b.custom_id(cid::WireheadValue::Negative2.to_id(g.clone(), seed))
+                    if let Some(seed) = images.get(0).and_then(|i| i.1) {
+                        m.components(|mc| {
+                            mc.create_action_row(|row| {
+                                let g = &genome;
+                                row.create_button(|b| {
+                                    b.custom_id(
+                                        cid::WireheadValue::Negative2.to_id(g.clone(), seed),
+                                    )
                                     .label("-2")
                                     .style(ButtonStyle::Danger)
-                            })
-                            .create_button(|b| {
-                                b.custom_id(cid::WireheadValue::Negative1.to_id(g.clone(), seed))
+                                })
+                                .create_button(|b| {
+                                    b.custom_id(
+                                        cid::WireheadValue::Negative1.to_id(g.clone(), seed),
+                                    )
                                     .label("-1")
                                     .style(ButtonStyle::Danger)
-                            })
-                            .create_button(|b| {
-                                b.custom_id(cid::WireheadValue::Zero.to_id(g.clone(), seed))
-                                    .label("0")
-                                    .style(ButtonStyle::Secondary)
-                            })
-                            .create_button(|b| {
-                                b.custom_id(cid::WireheadValue::Positive1.to_id(g.clone(), seed))
+                                })
+                                .create_button(|b| {
+                                    b.custom_id(cid::WireheadValue::Zero.to_id(g.clone(), seed))
+                                        .label("0")
+                                        .style(ButtonStyle::Secondary)
+                                })
+                                .create_button(|b| {
+                                    b.custom_id(
+                                        cid::WireheadValue::Positive1.to_id(g.clone(), seed),
+                                    )
                                     .label("1")
                                     .style(ButtonStyle::Success)
-                            })
-                            .create_button(|b| {
-                                b.custom_id(cid::WireheadValue::Positive2.to_id(g.clone(), seed))
+                                })
+                                .create_button(|b| {
+                                    b.custom_id(
+                                        cid::WireheadValue::Positive2.to_id(g.clone(), seed),
+                                    )
                                     .label("2")
                                     .style(ButtonStyle::Success)
+                                })
                             })
-                        })
-                    });
+                        });
+                    }
 
                     if !hide_prompt {
                         m.content(format!(
@@ -168,31 +176,25 @@ pub async fn task(parameters: Parameters) -> anyhow::Result<()> {
 /// always guaranteed to return at least one image if it suceeds
 async fn generate(
     client: &sd::Client,
-    base_generation_request: sd::BaseGenerationRequest,
+    mut parameters: CommandGenerationParameters,
     prompt: String,
-) -> anyhow::Result<Vec<(Vec<u8>, i64)>> {
-    let mut base = sd::BaseGenerationRequest {
-        prompt,
-        ..base_generation_request
-    };
-    util::fixup_base_generation_request(&mut base);
-
-    let result = client
-        .generate_from_text(&sd::TextToImageGenerationRequest {
-            base,
-            ..Default::default()
-        })
-        .await;
+) -> anyhow::Result<Vec<(Vec<u8>, Option<i64>)>> {
+    parameters.base_generation_mut().prompt = prompt;
+    let result = parameters.generate(client).await;
 
     Ok(match result {
-        Ok(result) => result.pngs.into_iter().zip(result.info.seeds).collect(),
+        Ok(result) => result
+            .pngs
+            .into_iter()
+            .zip(result.info.seeds.into_iter().map(Some))
+            .collect(),
         Err(err) => {
             println!("generation failed: {err:?}");
             vec![(
                 util::encode_image_to_png_bytes(image::open(
                     constant::resource::generation_failed_path(),
                 )?)?,
-                0,
+                None,
             )]
         }
     })

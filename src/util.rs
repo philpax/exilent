@@ -1,4 +1,3 @@
-use anyhow::Context;
 use futures::Future;
 use serenity::{
     async_trait,
@@ -83,11 +82,10 @@ pub fn value_to_channel(v: &CommandDataOptionValue) -> Option<PartialChannel> {
     }
 }
 
-pub fn get_image_url(options: &[CommandDataOption]) -> anyhow::Result<String> {
+pub fn get_image_url(options: &[CommandDataOption]) -> Option<String> {
     get_value(options, constant::value::IMAGE_ATTACHMENT)
         .and_then(value_to_attachment_url)
         .or_else(|| get_value(options, constant::value::IMAGE_URL).and_then(value_to_string))
-        .context("expected an image to be passed in")
 }
 
 pub fn generate_chunked_strings<'a>(

@@ -36,46 +36,6 @@ pub async fn register(http: &Http, models: &[sd::Model]) -> anyhow::Result<()> {
 
     Command::create_global_application_command(http, |command| {
         command
-            .name(&Configuration::get().commands.paintover)
-            .description("Paints your dreams over another image");
-
-        command::populate_generate_options(
-            |opt| {
-                command.add_option(opt);
-            },
-            models,
-            true,
-        );
-        command
-            .create_option(|option| {
-                option
-                    .name(constant::value::IMAGE_URL)
-                    .description("The URL of the image to paint over")
-                    .kind(CommandOptionType::String)
-            })
-            .create_option(|option| {
-                option
-                    .name(constant::value::IMAGE_ATTACHMENT)
-                    .description("The image to paint over")
-                    .kind(CommandOptionType::Attachment)
-            })
-            .create_option(|option| {
-                let opt = option
-                    .name(constant::value::RESIZE_MODE)
-                    .description("How to resize the image to match the generation")
-                    .kind(CommandOptionType::String);
-
-                for value in sd::ResizeMode::VALUES {
-                    opt.add_string_choice(value, value);
-                }
-
-                opt
-            })
-    })
-    .await?;
-
-    Command::create_global_application_command(http, |command| {
-        command
             .name(&Configuration::get().commands.postprocess)
             .description("Postprocesses an image");
 
@@ -363,22 +323,18 @@ pub async fn paint(
         .unwrap();
 
     util::run_and_report_error(&aci, http, async {
-        let base = {
-            let base_parameters = command::OwnedBaseGenerationParameters::load(
-                aci.user().id,
-                aci.guild_id().context("no guild id")?,
-                &aci.data.options,
-                store,
-                models,
-                true,
-                true,
-            )?;
+        let params = command::GenerationParameters::load(
+            aci.user().id,
+            aci.guild_id().context("no guild id")?,
+            &aci.data.options,
+            store,
+            models,
+            true,
+            true,
+        )
+        .await?;
 
-            let mut base = base_parameters.as_base_generation_request();
-            util::fixup_base_generation_request(&mut base);
-            base
-        };
-
+        let base = params.base_generation();
         aci.edit(
             http,
             &format!(
@@ -396,101 +352,12 @@ pub async fn paint(
         let (prompt, negative_prompt) = (base.prompt.clone(), base.negative_prompt.clone());
         issuer::generation_task(
             (client, models),
-            tokio::task::spawn(
-                client.generate_from_text(&sd::TextToImageGenerationRequest {
-                    base,
-                    ..Default::default()
-                }),
-            ),
+            tokio::task::spawn(params.clone().generate(client)),
             store,
             http,
             (&aci, None),
             (&prompt, negative_prompt.as_deref()),
-            None,
-        )
-        .await
-    })
-    .await;
-}
-
-pub async fn paintover(
-    client: &sd::Client,
-    models: &[sd::Model],
-    store: &store::Store,
-    http: &Http,
-    aci: ApplicationCommandInteraction,
-) {
-    aci.create(http, "Paintover request received, processing...")
-        .await
-        .unwrap();
-
-    util::run_and_report_error(&aci, http, async {
-        let options = &aci.data.options;
-        let url = util::get_image_url(options)?;
-        let resize_mode = util::get_value(options, constant::value::RESIZE_MODE)
-            .and_then(util::value_to_string)
-            .and_then(|s| sd::ResizeMode::try_from(s.as_str()).ok())
-            .unwrap_or_default();
-
-        let bytes = reqwest::get(&url).await?.bytes().await?;
-        let image = image::load_from_memory(&bytes)?;
-
-        let base = {
-            let mut base_parameters = command::OwnedBaseGenerationParameters::load(
-                aci.user.id,
-                aci.guild_id().context("no guild id")?,
-                options,
-                store,
-                models,
-                false,
-                true,
-            )?;
-            if base_parameters.width.is_none() {
-                base_parameters.width = Some(image.width());
-            }
-            if base_parameters.height.is_none() {
-                base_parameters.height = Some(image.height());
-            }
-            let mut base_generation_request = base_parameters.as_base_generation_request();
-            util::fixup_base_generation_request(&mut base_generation_request);
-            base_generation_request
-        };
-
-        aci.edit(
-            http,
-            &format!(
-                "`{}`{}: Painting over {} (waiting for start)...",
-                &base.prompt,
-                base.negative_prompt
-                    .as_deref()
-                    .filter(|s| !s.is_empty())
-                    .map(|s| format!(" - `{s}`"))
-                    .unwrap_or_default(),
-                url
-            ),
-        )
-        .await?;
-
-        let (prompt, negative_prompt) = (base.prompt.clone(), base.negative_prompt.clone());
-        issuer::generation_task(
-            (client, models),
-            tokio::task::spawn(client.generate_from_image_and_text(
-                &sd::ImageToImageGenerationRequest {
-                    base,
-                    images: vec![image.clone()],
-                    resize_mode: Some(resize_mode),
-                    ..Default::default()
-                },
-            )),
-            store,
-            http,
-            (&aci, None),
-            (&prompt, negative_prompt.as_deref()),
-            Some(store::ImageGeneration {
-                init_image: image.clone(),
-                init_url: url.clone(),
-                resize_mode,
-            }),
+            params.image_generation(),
         )
         .await
     })
@@ -504,7 +371,7 @@ pub async fn postprocess(client: &sd::Client, http: &Http, aci: ApplicationComma
 
     util::run_and_report_error(&aci, http, async {
         let options = &aci.data.options;
-        let url = util::get_image_url(options)?;
+        let url = util::get_image_url(options).context("no url specified")?;
 
         aci.edit(http, &format!("Postprocessing {url}...")).await?;
 
@@ -590,7 +457,7 @@ pub async fn interrogate(
         .unwrap();
 
     util::run_and_report_error(&aci, http, async {
-        let url = util::get_image_url(&aci.data.options)?;
+        let url = util::get_image_url(&aci.data.options).context("no url specified")?;
 
         let interrogator = util::get_value(&aci.data.options, constant::value::INTERROGATOR)
             .and_then(util::value_to_string)
@@ -623,7 +490,7 @@ pub async fn png_info(client: &sd::Client, http: &Http, aci: ApplicationCommandI
         .unwrap();
 
     util::run_and_report_error(&aci, http, async {
-        let url = util::get_image_url(&aci.data.options)?;
+        let url = util::get_image_url(&aci.data.options).context("no url specified")?;
 
         let interaction: &dyn DiscordInteraction = &aci;
         interaction

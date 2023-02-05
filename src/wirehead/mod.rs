@@ -1,5 +1,5 @@
 use self::simulation::{FitnessStore, TextGenome};
-use crate::command::OwnedBaseGenerationParameters;
+use crate::command::GenerationParameters as CommandGenerationParameters;
 use serenity::{http::Http, model::prelude::ChannelId};
 use stable_diffusion_a1111_webui_client as sd;
 use std::sync::{
@@ -14,7 +14,7 @@ pub mod simulation;
 
 #[derive(Clone)]
 pub struct GenerationParameters {
-    parameters: OwnedBaseGenerationParameters,
+    parameters: CommandGenerationParameters,
     tags: Vec<String>,
     prefix: Option<String>,
     suffix: Option<String>,
