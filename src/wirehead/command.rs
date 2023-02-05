@@ -161,6 +161,7 @@ async fn start(
 
         let parameters = command::OwnedBaseGenerationParameters::load(
             cmd.user.id,
+            cmd.guild_id.context("no guild id")?,
             &subcommand.options,
             store,
             models,

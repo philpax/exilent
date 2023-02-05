@@ -285,7 +285,7 @@ async fn stats(
     cmd.create(http, "Getting stats...").await.unwrap();
 
     util::run_and_report_error(&cmd, http, async {
-        let stats = store.get_model_usage_counts()?;
+        let stats = store.get_model_usage_counts(cmd.guild_id.context("no guild id")?)?;
         async fn get_user_name(
             http: &Http,
             guild_id: Option<GuildId>,
@@ -310,7 +310,12 @@ async fn stats(
         .collect::<Result<Vec<_>, _>>()?;
         users.sort_by(|a, b| a.0.cmp(&b.0));
 
-        let message = users
+        let guild = http
+            .get_guild(*cmd.guild_id.context("no guild id")?.as_u64())
+            .await?;
+        let header = format!("**Statistics for server *{}***:", guild.name);
+
+        let mut body = users
             .into_iter()
             .flat_map(|(user_name, user_id)| {
                 std::iter::once(format!("**{user_name}**"))
@@ -334,6 +339,13 @@ async fn stats(
             })
             .collect::<Vec<String>>();
 
+        let mut message = vec![header];
+        if body.is_empty() {
+            message.push("No generations yet.".to_string());
+        } else {
+            message.append(&mut body);
+        }
+
         util::chunked_response(http, &cmd, message.iter().map(|s| s.as_str()), "\n").await
     })
     .await;
@@ -354,6 +366,7 @@ pub async fn paint(
         let base = {
             let base_parameters = command::OwnedBaseGenerationParameters::load(
                 aci.user().id,
+                aci.guild_id().context("no guild id")?,
                 &aci.data.options,
                 store,
                 models,
@@ -425,6 +438,7 @@ pub async fn paintover(
         let base = {
             let mut base_parameters = command::OwnedBaseGenerationParameters::load(
                 aci.user.id,
+                aci.guild_id().context("no guild id")?,
                 options,
                 store,
                 models,

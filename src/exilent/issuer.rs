@@ -139,6 +139,7 @@ pub async fn generation_task(
             image_url: None,
             timestamp: result.info.job_timestamp,
             user_id: interaction.user().id,
+            guild_id: interaction.guild_id().context("no guild id")?,
             denoising_strength: result.info.denoising_strength,
             image_generation: image_generation.clone(),
         };
@@ -254,6 +255,7 @@ pub async fn interrogate_task(
 
     let store_key = store.insert_interrogation(store::Interrogation {
         user_id: interaction.user().id,
+        guild_id: interaction.guild_id().context("no guild id")?,
         source: source.clone(),
         result: result.clone(),
         interrogator,

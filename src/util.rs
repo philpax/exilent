@@ -13,7 +13,7 @@ use serenity::{
                 modal::ModalSubmitInteraction,
                 InteractionResponseType,
             },
-            ChannelId, Message, PartialChannel,
+            ChannelId, GuildId, Message, PartialChannel,
         },
         user::User,
     },
@@ -281,6 +281,7 @@ pub trait DiscordInteraction: Send + Sync {
     async fn create_or_edit(&self, http: &Http, message: &str) -> anyhow::Result<()>;
 
     fn channel_id(&self) -> ChannelId;
+    fn guild_id(&self) -> Option<GuildId>;
     fn message(&self) -> Option<&Message>;
     fn user(&self) -> &User;
 }
@@ -319,6 +320,9 @@ macro_rules! implement_interaction {
 
             fn channel_id(&self) -> ChannelId {
                 self.channel_id
+            }
+            fn guild_id(&self) -> Option<GuildId> {
+                self.guild_id
             }
             fn user(&self) -> &User {
                 &self.user

@@ -3,7 +3,8 @@ use itertools::Itertools;
 use serenity::{
     builder::CreateApplicationCommandOption,
     model::prelude::{
-        command::CommandOptionType, interaction::application_command::CommandDataOption, UserId,
+        command::CommandOptionType, interaction::application_command::CommandDataOption, GuildId,
+        UserId,
     },
 };
 use stable_diffusion_a1111_webui_client as sd;
@@ -179,6 +180,7 @@ pub struct OwnedBaseGenerationParameters {
 impl OwnedBaseGenerationParameters {
     pub fn load(
         user_id: UserId,
+        guild_id: GuildId,
         options: &[CommandDataOption],
         store: &Store,
         models: &[sd::Model],
@@ -208,7 +210,7 @@ impl OwnedBaseGenerationParameters {
             .and_then(value_to_int)
             .map(|v| v as u32);
 
-        let last_generation = store.get_last_generation_for_user(user_id)?;
+        let last_generation = store.get_last_generation_for_user(user_id, guild_id)?;
         let last_generation = last_generation.as_ref();
 
         let mut width = get_value(options, constant::value::WIDTH)
