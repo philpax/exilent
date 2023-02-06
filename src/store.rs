@@ -70,6 +70,7 @@ impl Store {
                 id	                INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id	            TEXT NOT NULL,
                 name                TEXT NOT NULL,
+                guild_id            TEXT NOT NULL,
 
                 prompt_prefix	    TEXT,
                 prompt_suffix       TEXT,
@@ -85,9 +86,16 @@ impl Store {
                 denoising_strength  REAL,
 
                 -- img2img specific fields
-                resize_mode         TEXT
+                init_image          BLOB,
+                resize_mode         TEXT,
+                init_url            TEXT
             ) STRICT;
         ",
+            (),
+        )?;
+
+        connection.execute(
+            r"CREATE INDEX IF NOT EXISTS preset_name ON preset (name)",
             (),
         )?;
 
@@ -219,18 +227,20 @@ impl Store {
     pub fn insert_preset(&self, preset: Preset) -> anyhow::Result<i64> {
         let p = preset;
         let db = &mut *self.0.lock();
+
         db.execute(
             r"
             INSERT INTO preset
-                (user_id, name, prompt_prefix, prompt_suffix, negative_prompt, width, height,
-                 cfg_scale, steps, tiling, restore_faces, sampler, model_hash,
-                 denoising_strength, resize_mode)
+                (user_id, name, guild_id, prompt_prefix, prompt_suffix, negative_prompt, width, height,
+                 cfg_scale, steps, tiling, restore_faces, sampler, model_hash, denoising_strength, init_image,
+                 resize_mode, init_url)
             VALUES
-                    (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ",
             rusqlite::params![
                 p.user_id.as_u64().to_string(),
                 p.name,
+                p.guild_id.as_u64().to_string(),
                 p.prompt_prefix,
                 p.prompt_suffix,
                 p.negative_prompt,
@@ -243,40 +253,61 @@ impl Store {
                 p.sampler.map(|s| s.to_string()),
                 p.model_hash,
                 p.denoising_strength,
-                p.resize_mode.map(|s| s.to_string())
+                p.image_generation
+                    .as_ref()
+                    .map(|ig| util::encode_image_to_png_bytes(ig.init_image.clone()))
+                    .transpose()?,
+                p.image_generation
+                    .as_ref()
+                    .map(|ig| ig.resize_mode.to_string()),
+                p.image_generation.as_ref().map(|ig| ig.init_url.as_str()),
             ],
         )?;
 
         Ok(db.last_insert_rowid())
     }
 
-    pub fn get_preset(&self, user_id: UserId, name: String) -> anyhow::Result<Option<Preset>> {
+    pub fn get_preset(
+        &self,
+        user_id: UserId,
+        name: String,
+        guild_id: GuildId,
+    ) -> anyhow::Result<Option<Preset>> {
         let db = &mut *self.0.lock();
-        let Some((
-            id, prompt_prefix, prompt_suffix, negative_prompt, width, height,
-                 cfg_scale, steps, tiling, restore_faces, sampler, model_hash,
-                 denoising_strength, resize_mode
-        )): Option<(Option<i64>, Option<String>, Option<String>, Option<String>, Option<u32>, Option<u32>, Option<f32>, Option<u32>, Option<bool>, Option<bool>, Option<String>, Option<String>, Option<f32>, Option<String>)> = db.query_row(
+        let optional: Option<(
+            i64, String, String, String, Option<String>, Option<String>, Option<String>, Option<i64>, Option<i64>,
+            Option<f32>, Option<i64>, Option<i64>, Option<i64>, Option<String>, Option<String>, Option<f32>,
+            Option<Vec<u8>>, Option<String>, Option<String>
+        )>  = db.query_row(
             r"
             SELECT
-                id, prompt_prefix, prompt_suffix, negative_prompt, width, height,
-            cfg_scale, steps, tiling, restore_faces, sampler, model_hash,
-            denoising_strength, resize_mode
+                id, user_id, name, guild_id, prompt_prefix, prompt_suffix, negative_prompt, width, height,
+                cfg_scale, steps, tiling, restore_faces, sampler, model_hash, denoising_strength, init_image,
+                resize_mode, init_url
             FROM
                 preset
             WHERE
-                user_id = ? AND name = ?
+                user_id = ? AND name = ? AND guild_id = ?
             ",
-            (user_id.as_u64().to_string(), name.clone()),
-            |r| r.try_into(),
+            (user_id.as_u64().to_string(), name.clone(), guild_id.as_u64().to_string()),
+            |r| Ok((r.get(0)?, r.get(0)?, r.get(0)?, r.get(0)?, r.get(0)?, r.get(0)?, r.get(0)?, r.get(0)?, r.get(0)?,
+                r.get(0)?, r.get(0)?, r.get(0)?, r.get(0)?, r.get(0)?, r.get(0)?, r.get(0)?, r.get(0)?,
+                r.get(0)?, r.get(0)?)),
         )
-        .optional()? else { return Ok(None); };
+        .optional()?;
+
+        let Some((
+            id, user_id, name, guild_id, prompt_prefix, prompt_suffix, negative_prompt, width, height,
+            cfg_scale, steps, tiling, restore_faces, sampler, model_hash, denoising_strength, init_image,
+            resize_mode, init_url
+        ))= optional else { return Ok(None); };
+
         let sampler = sampler.and_then(|s| sd::Sampler::try_from(s.as_str()).ok());
-        let resize_mode = resize_mode.and_then(|s| sd::ResizeMode::try_from(s.as_str()).ok());
         Ok(Some(Preset {
-            id,
-            user_id,
+            id: Some(id),
+            user_id: UserId(user_id.parse()?),
             name,
+            guild_id: GuildId(guild_id.parse()?),
             prompt_prefix,
             prompt_suffix,
             negative_prompt,
@@ -289,7 +320,7 @@ impl Store {
             sampler,
             model_hash,
             denoising_strength,
-            resize_mode,
+            image_generation: store_to_image_generation(init_image, resize_mode, init_url)?,
         }))
     }
 
@@ -543,69 +574,22 @@ pub struct Preset {
     pub id: Option<i64>,
     pub user_id: UserId,
     pub name: String,
+    pub guild_id: GuildId,
 
     pub prompt_prefix: Option<String>,
     pub prompt_suffix: Option<String>,
     pub negative_prompt: Option<String>,
-    pub width: Option<u32>,
-    pub height: Option<u32>,
+    pub width: Option<i64>,
+    pub height: Option<i64>,
     pub cfg_scale: Option<f32>,
-    pub steps: Option<u32>,
-    pub tiling: Option<bool>,
-    pub restore_faces: Option<bool>,
-    pub sampler: Option<Sampler>,
+    pub steps: Option<i64>,
+    pub tiling: Option<i64>,
+    pub restore_faces: Option<i64>,
+    pub sampler: Option<sd::Sampler>,
     pub model_hash: Option<String>,
     pub denoising_strength: Option<f32>,
-    pub resize_mode: Option<sd::ResizeMode>,
-}
-impl Preset {
-    // pub fn as_message(&self, models: &[sd::Model]) -> String {
-    //     use crate::constant as c;
-    //     format!(
-    //         "`/{} {}:{:?}{:?}{} {}:{:?} {}:{:?} {}:{:?} {}:{:?} {}:{:?} {}:{:?} {}:{:?} {}:{:?} {}:{:?}`",
-    //         c::command::PRESET,
-    //         c::value::PROMPT,
-    //         self.prompt_prefix,
-    //         self.prompt_suffix,
-    //         self.negative_prompt
-    //             .as_ref()
-    //             .map(|s| format!(" {}:{s}", c::value::NEGATIVE_PROMPT))
-    //             .unwrap_or_default(),
-    //         c::value::WIDTH,
-    //         self.width,
-    //         c::value::HEIGHT,
-    //         self.height,
-    //         c::value::GUIDANCE_SCALE,
-    //         self.cfg_scale,
-    //         c::value::STEPS,
-    //         self.steps,
-    //         c::value::TILING,
-    //         self.tiling,
-    //         c::value::RESTORE_FACES,
-    //         self.restore_faces,
-    //         c::value::SAMPLER,
-    //         self.sampler,
-    //         c::value::DENOISING_STRENGTH,
-    //         self.denoising_strength,
-    //         util::find_model_by_hash(models, &self.model_hash)
-    //             .map(|(idx, m)| {
-    //                 let model_category = idx / c::misc::MODEL_CHUNK_COUNT;
-    //                 format!(
-    //                     " {}{}:{}",
-    //                     c::value::MODEL,
-    //                     if model_category == 0 {
-    //                         String::new()
-    //                     } else {
-    //                         (model_category + 1).to_string()
-    //                     },
-    //                     m.name
-    //                 )
-    //             })
-    //             .unwrap_or_default(),
-    //         c::value::RESIZE_MODE,
-    //         self.resize_mode
-    //     )
-    // }
+
+    pub image_generation: Option<ImageGeneration>,
 }
 
 impl Store {
@@ -726,19 +710,27 @@ impl Store {
             user_id: UserId(user_id.parse()?),
             guild_id: GuildId(guild_id.parse()?),
             denoising_strength,
-            image_generation: init_image
-                .zip(resize_mode)
-                .zip(init_url)
-                .map(|((init_image, resize_mode), init_url)| {
-                    anyhow::Ok(ImageGeneration {
-                        init_image: image::load_from_memory(&init_image)?,
-                        init_url,
-                        resize_mode: sd::ResizeMode::try_from(resize_mode.as_str())
-                            .ok()
-                            .context("invalid resize mode")?,
-                    })
-                })
-                .transpose()?,
+            image_generation: store_to_image_generation(init_image, resize_mode, init_url)?,
         }))
     }
+}
+
+fn store_to_image_generation(
+    init_image: Option<Vec<u8>>,
+    resize_mode: Option<String>,
+    init_url: Option<String>,
+) -> anyhow::Result<Option<ImageGeneration>> {
+    init_image
+        .zip(resize_mode)
+        .zip(init_url)
+        .map(|((init_image, resize_mode), init_url)| {
+            anyhow::Ok(ImageGeneration {
+                init_image: image::load_from_memory(&init_image)?,
+                init_url,
+                resize_mode: sd::ResizeMode::try_from(resize_mode.as_str())
+                    .ok()
+                    .context("invalid resize mode")?,
+            })
+        })
+        .transpose()
 }
