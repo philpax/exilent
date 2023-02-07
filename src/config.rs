@@ -54,7 +54,6 @@ impl Default for General {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Commands {
     pub paint: String,
-    pub paintover: String,
     pub postprocess: String,
     pub interrogate: String,
     pub exilent: String,
@@ -65,7 +64,6 @@ impl Commands {
     pub fn all(&self) -> HashSet<&str> {
         HashSet::from_iter([
             self.paint.as_str(),
-            self.paintover.as_str(),
             self.postprocess.as_str(),
             self.interrogate.as_str(),
             self.exilent.as_str(),
@@ -78,7 +76,6 @@ impl Default for Commands {
     fn default() -> Self {
         Self {
             paint: "paint".to_string(),
-            paintover: "paintover".to_string(),
             postprocess: "postprocess".to_string(),
             interrogate: "interrogate".to_string(),
             exilent: "exilent".to_string(),

@@ -219,9 +219,6 @@ impl EventHandler for Handler {
                 if name == commands.paint {
                     exilent::command::paint(&self.client, &self.models, &self.store, http, cmd)
                         .await
-                } else if name == commands.paintover {
-                    exilent::command::paintover(&self.client, &self.models, &self.store, http, cmd)
-                        .await
                 } else if name == commands.postprocess {
                     exilent::command::postprocess(&self.client, http, cmd).await
                 } else if name == commands.interrogate {

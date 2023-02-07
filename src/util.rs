@@ -1,4 +1,3 @@
-use anyhow::Context;
 use futures::Future;
 use serenity::{
     async_trait,
@@ -13,7 +12,7 @@ use serenity::{
                 modal::ModalSubmitInteraction,
                 InteractionResponseType,
             },
-            ChannelId, Message, PartialChannel,
+            ChannelId, GuildId, Message, PartialChannel,
         },
         user::User,
     },
@@ -83,11 +82,10 @@ pub fn value_to_channel(v: &CommandDataOptionValue) -> Option<PartialChannel> {
     }
 }
 
-pub fn get_image_url(options: &[CommandDataOption]) -> anyhow::Result<String> {
+pub fn get_image_url(options: &[CommandDataOption]) -> Option<String> {
     get_value(options, constant::value::IMAGE_ATTACHMENT)
         .and_then(value_to_attachment_url)
         .or_else(|| get_value(options, constant::value::IMAGE_URL).and_then(value_to_string))
-        .context("expected an image to be passed in")
 }
 
 pub fn generate_chunked_strings<'a>(
@@ -281,6 +279,7 @@ pub trait DiscordInteraction: Send + Sync {
     async fn create_or_edit(&self, http: &Http, message: &str) -> anyhow::Result<()>;
 
     fn channel_id(&self) -> ChannelId;
+    fn guild_id(&self) -> Option<GuildId>;
     fn message(&self) -> Option<&Message>;
     fn user(&self) -> &User;
 }
@@ -319,6 +318,9 @@ macro_rules! implement_interaction {
 
             fn channel_id(&self) -> ChannelId {
                 self.channel_id
+            }
+            fn guild_id(&self) -> Option<GuildId> {
+                self.guild_id
             }
             fn user(&self) -> &User {
                 &self.user

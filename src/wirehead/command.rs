@@ -159,19 +159,23 @@ async fn start(
         let suffix = util::get_value(&subcommand.options, constant::value::SUFFIX)
             .and_then(util::value_to_string);
 
-        let parameters = command::OwnedBaseGenerationParameters::load(
+        let parameters = command::GenerationParameters::load(
             cmd.user.id,
+            cmd.guild_id.context("no guild id")?,
             &subcommand.options,
             store,
             models,
             false,
             false,
-        )?;
+        )
+        .await?;
 
         fn display<T: Display>(value: &Option<T>) -> Option<&dyn Display> {
             value.as_ref().map(|s| s as &dyn Display)
         }
 
+        let base = parameters.base_generation();
+        let (image_url, resize_mode) = parameters.image_params().unzip();
         cmd.edit(
             &http,
             &format!(
@@ -180,21 +184,23 @@ async fn start(
                     ("Tags", Some(&tag_selection as &dyn Display)),
                     ("Prefix", display(&prefix)),
                     ("Suffix", display(&suffix)),
-                    ("Negative prompt", display(&parameters.negative_prompt)),
-                    ("Seed", display(&parameters.seed)),
-                    ("Count", display(&parameters.batch_count)),
-                    ("Width", display(&parameters.width)),
-                    ("Height", display(&parameters.height)),
-                    ("Guidance scale", display(&parameters.cfg_scale)),
+                    ("Image URL", display(&image_url)),
+                    ("Negative prompt", display(&base.negative_prompt)),
+                    ("Seed", display(&base.seed)),
+                    ("Count", display(&base.batch_count)),
+                    ("Width", display(&base.width)),
+                    ("Height", display(&base.height)),
+                    ("Guidance scale", display(&base.cfg_scale)),
+                    ("Denoising strength", display(&base.denoising_strength)),
+                    ("Resize mode", display(&resize_mode)),
+                    ("Steps", display(&base.steps)),
+                    ("Tiling", display(&base.tiling)),
+                    ("Restore faces", display(&base.restore_faces)),
+                    ("Sampler", display(&base.sampler)),
                     (
-                        "Denoising strength",
-                        display(&parameters.denoising_strength)
+                        "Model",
+                        display(&base.model.as_ref().map(|m| m.name.as_str()))
                     ),
-                    ("Steps", display(&parameters.steps)),
-                    ("Tiling", display(&parameters.tiling)),
-                    ("Restore faces", display(&parameters.restore_faces)),
-                    ("Sampler", display(&parameters.sampler)),
-                    ("Model", display(&Some(parameters.model.name.as_str()))),
                     (
                         "To Exilent channel",
                         display(&to_exilent_channel_id.map(|c| c.mention()))

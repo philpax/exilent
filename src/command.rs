@@ -1,9 +1,18 @@
-use crate::{config::Configuration, constant, store::Store, util};
+use std::pin::Pin;
+
+use crate::{
+    config::Configuration,
+    constant,
+    store::{self, Store},
+    util,
+};
+use futures::Future;
 use itertools::Itertools;
 use serenity::{
     builder::CreateApplicationCommandOption,
     model::prelude::{
-        command::CommandOptionType, interaction::application_command::CommandDataOption, UserId,
+        command::CommandOptionType, interaction::application_command::CommandDataOption, GuildId,
+        UserId,
     },
 };
 use stable_diffusion_a1111_webui_client as sd;
@@ -158,33 +167,50 @@ pub fn populate_generate_options(
             opt
         });
     }
+
+    add_option({
+        let mut opt = CreateApplicationCommandOption::default();
+        opt.name(constant::value::IMAGE_URL)
+            .description("The URL of the image to paint over")
+            .kind(CommandOptionType::String);
+        opt
+    });
+    add_option({
+        let mut opt = CreateApplicationCommandOption::default();
+        opt.name(constant::value::IMAGE_ATTACHMENT)
+            .description("The image to paint over")
+            .kind(CommandOptionType::Attachment);
+        opt
+    });
+    add_option({
+        let mut opt = CreateApplicationCommandOption::default();
+        opt.name(constant::value::RESIZE_MODE)
+            .description("How to resize the image to match the generation")
+            .kind(CommandOptionType::String);
+
+        for value in sd::ResizeMode::VALUES {
+            opt.add_string_choice(value, value);
+        }
+
+        opt
+    });
 }
 
 #[derive(Clone)]
-pub struct OwnedBaseGenerationParameters {
-    pub prompt: String,
-    pub negative_prompt: Option<String>,
-    pub seed: Option<i64>,
-    pub batch_count: Option<u32>,
-    pub width: Option<u32>,
-    pub height: Option<u32>,
-    pub cfg_scale: Option<f32>,
-    pub denoising_strength: Option<f32>,
-    pub steps: Option<u32>,
-    pub tiling: Option<bool>,
-    pub restore_faces: Option<bool>,
-    pub sampler: Option<sd::Sampler>,
-    pub model: sd::Model,
+pub enum GenerationParameters {
+    Text(sd::TextToImageGenerationRequest),
+    Image(sd::ImageToImageGenerationRequest, String),
 }
-impl OwnedBaseGenerationParameters {
-    pub fn load(
+impl GenerationParameters {
+    pub async fn load(
         user_id: UserId,
+        guild_id: GuildId,
         options: &[CommandDataOption],
         store: &Store,
         models: &[sd::Model],
         use_last_generation_for_size: bool,
         enforce_prompt: bool,
-    ) -> anyhow::Result<OwnedBaseGenerationParameters> {
+    ) -> anyhow::Result<GenerationParameters> {
         use util::{
             find_model_by_hash, get_value, get_values_starting_with, value_to_bool, value_to_int,
             value_to_number, value_to_string,
@@ -208,7 +234,7 @@ impl OwnedBaseGenerationParameters {
             .and_then(value_to_int)
             .map(|v| v as u32);
 
-        let last_generation = store.get_last_generation_for_user(user_id)?;
+        let last_generation = store.get_last_generation_for_user(user_id, guild_id)?;
         let last_generation = last_generation.as_ref();
 
         let mut width = get_value(options, constant::value::WIDTH)
@@ -277,10 +303,11 @@ impl OwnedBaseGenerationParameters {
             }
         };
 
-        Ok(OwnedBaseGenerationParameters {
+        let mut base = sd::BaseGenerationRequest {
             prompt,
             negative_prompt,
             seed,
+            batch_size: Some(1),
             batch_count,
             width,
             height,
@@ -290,27 +317,87 @@ impl OwnedBaseGenerationParameters {
             tiling,
             restore_faces,
             sampler,
-            model,
-        })
+            model: Some(model),
+            ..Default::default()
+        };
+
+        let url = util::get_image_url(options);
+        let params = if let Some(url) = url {
+            let bytes = reqwest::get(&url).await?.bytes().await?;
+            let image = image::load_from_memory(&bytes)?;
+            let resize_mode = util::get_value(options, constant::value::RESIZE_MODE)
+                .and_then(util::value_to_string)
+                .and_then(|s| sd::ResizeMode::try_from(s.as_str()).ok())
+                .unwrap_or_default();
+
+            if base.width.is_none() {
+                base.width = Some(image.width());
+            }
+            if base.height.is_none() {
+                base.height = Some(image.height());
+            }
+
+            util::fixup_base_generation_request(&mut base);
+
+            Self::Image(
+                sd::ImageToImageGenerationRequest {
+                    base,
+                    images: vec![image],
+                    resize_mode: Some(resize_mode),
+                    ..Default::default()
+                },
+                url,
+            )
+        } else {
+            util::fixup_base_generation_request(&mut base);
+            Self::Text(sd::TextToImageGenerationRequest {
+                base,
+                ..Default::default()
+            })
+        };
+
+        Ok(params)
     }
 
-    pub fn as_base_generation_request(&self) -> sd::BaseGenerationRequest {
-        sd::BaseGenerationRequest {
-            prompt: self.prompt.clone(),
-            negative_prompt: self.negative_prompt.clone(),
-            seed: self.seed,
-            batch_size: Some(1),
-            batch_count: self.batch_count,
-            width: self.width,
-            height: self.height,
-            cfg_scale: self.cfg_scale,
-            denoising_strength: self.denoising_strength,
-            steps: self.steps,
-            tiling: self.tiling,
-            restore_faces: self.restore_faces,
-            sampler: self.sampler,
-            model: Some(self.model.clone()),
-            ..Default::default()
+    pub fn image_params(&self) -> Option<(&str, sd::ResizeMode)> {
+        match self {
+            GenerationParameters::Image(image, url) => Some((url.as_str(), image.resize_mode?)),
+            _ => None,
+        }
+    }
+
+    pub fn image_generation(&self) -> Option<store::ImageGeneration> {
+        match self {
+            GenerationParameters::Image(image, url) => Some(store::ImageGeneration {
+                init_image: image.images.get(0)?.clone(),
+                init_url: url.clone(),
+                resize_mode: image.resize_mode?,
+            }),
+            _ => None,
+        }
+    }
+
+    pub fn base_generation(&self) -> &sd::BaseGenerationRequest {
+        match self {
+            GenerationParameters::Text(t) => &t.base,
+            GenerationParameters::Image(i, _) => &i.base,
+        }
+    }
+
+    pub fn base_generation_mut(&mut self) -> &mut sd::BaseGenerationRequest {
+        match self {
+            GenerationParameters::Text(t) => &mut t.base,
+            GenerationParameters::Image(i, _) => &mut i.base,
+        }
+    }
+
+    pub fn generate(
+        &self,
+        client: &sd::Client,
+    ) -> Pin<Box<dyn Future<Output = sd::Result<sd::GenerationResult>> + Send + Sync>> {
+        match self {
+            GenerationParameters::Text(t) => Box::pin(client.generate_from_text(t)),
+            GenerationParameters::Image(i, _) => Box::pin(client.generate_from_image_and_text(i)),
         }
     }
 }

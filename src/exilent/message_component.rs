@@ -236,7 +236,10 @@ pub async fn interrogate_generate(
             .context("no interrogation found")?;
 
         // use last generation as default if available
-        let last_generation = store.get_last_generation_for_user(interaction.user().id)?;
+        let last_generation = store.get_last_generation_for_user(
+            interaction.user().id,
+            interaction.guild_id().context("no guild id")?,
+        )?;
         let last_generation = last_generation.as_ref();
 
         let base = {
