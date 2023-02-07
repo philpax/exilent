@@ -332,6 +332,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "data-encoding"
+version = "2.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "23d8666cb01533c39dde32bcbab8e227b4ed6679b2c925eba05feabea39508fb"
+
+[[package]]
 name = "digest"
 version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1649,11 +1655,12 @@ dependencies = [
 
 [[package]]
 name = "stable-diffusion-a1111-webui-client"
-version = "0.1.0"
-source = "git+https://github.com/philpax/stable-diffusion-a1111-webui-client.git?branch=main#5bb0cf376e84cfae7700021e190aabac5e6e175d"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18b245bdf0834e73404a00942dfd9a1939d22a6a694d2e242f39cd2a846158ee"
 dependencies = [
- "base64 0.13.1",
  "chrono",
+ "data-encoding",
  "image",
  "reqwest",
  "serde",
