@@ -64,6 +64,40 @@ impl Store {
         ",
             (),
         )?;
+        connection.execute(
+            r"
+            CREATE TABLE IF NOT EXISTS preset (
+                id	                INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id	            TEXT NOT NULL,
+                name                TEXT NOT NULL,
+                guild_id            TEXT NOT NULL,
+
+                prompt_prefix	    TEXT,
+                prompt_suffix       TEXT,
+                negative_prompt	    TEXT,
+                width	            INTEGER,
+                height	            INTEGER,
+                cfg_scale	        REAL,
+                steps	            INTEGER,
+                tiling	            INTEGER,
+                restore_faces	    INTEGER,
+                sampler	            TEXT,
+                model_hash	        TEXT,
+                denoising_strength  REAL,
+
+                -- img2img specific fields
+                init_image          BLOB,
+                resize_mode         TEXT,
+                init_url            TEXT
+            ) STRICT;
+        ",
+            (),
+        )?;
+
+        connection.execute(
+            r"CREATE INDEX IF NOT EXISTS preset_name ON preset (name)",
+            (),
+        )?;
 
         Ok(Self(Mutex::new(connection)))
     }
@@ -188,6 +222,106 @@ impl Store {
             result,
             interrogator,
         )?))
+    }
+
+    pub fn insert_preset(&self, preset: Preset) -> anyhow::Result<i64> {
+        let p = preset;
+        let db = &mut *self.0.lock();
+
+        db.execute(
+            r"
+            INSERT INTO preset
+                (user_id, name, guild_id, prompt_prefix, prompt_suffix, negative_prompt, width, height,
+                 cfg_scale, steps, tiling, restore_faces, sampler, model_hash, denoising_strength, init_image,
+                 resize_mode, init_url)
+            VALUES
+                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ",
+            rusqlite::params![
+                p.user_id.as_u64().to_string(),
+                p.name,
+                p.guild_id.as_u64().to_string(),
+                p.prompt_prefix,
+                p.prompt_suffix,
+                p.negative_prompt,
+                p.width,
+                p.height,
+                p.cfg_scale,
+                p.steps,
+                p.tiling,
+                p.restore_faces,
+                p.sampler.map(|s| s.to_string()),
+                p.model_hash,
+                p.denoising_strength,
+                p.image_generation
+                    .as_ref()
+                    .map(|ig| util::encode_image_to_png_bytes(ig.init_image.clone()))
+                    .transpose()?,
+                p.image_generation
+                    .as_ref()
+                    .map(|ig| ig.resize_mode.to_string()),
+                p.image_generation.as_ref().map(|ig| ig.init_url.as_str()),
+            ],
+        )?;
+
+        Ok(db.last_insert_rowid())
+    }
+
+    pub fn get_preset(
+        &self,
+        user_id: UserId,
+        name: String,
+        guild_id: GuildId,
+    ) -> anyhow::Result<Option<Preset>> {
+        let db = &mut *self.0.lock();
+        let optional: Option<(
+            i64, String, String, String, Option<String>, Option<String>, Option<String>, Option<i64>, Option<i64>,
+            Option<f32>, Option<i64>, Option<i64>, Option<i64>, Option<String>, Option<String>, Option<f32>,
+            Option<Vec<u8>>, Option<String>, Option<String>
+        )>  = db.query_row(
+            r"
+            SELECT
+                id, user_id, name, guild_id, prompt_prefix, prompt_suffix, negative_prompt, width, height,
+                cfg_scale, steps, tiling, restore_faces, sampler, model_hash, denoising_strength, init_image,
+                resize_mode, init_url
+            FROM
+                preset
+            WHERE
+                user_id = ? AND name = ? AND guild_id = ?
+            ",
+            (user_id.as_u64().to_string(), name.clone(), guild_id.as_u64().to_string()),
+            |r| Ok((r.get(0)?, r.get(0)?, r.get(0)?, r.get(0)?, r.get(0)?, r.get(0)?, r.get(0)?, r.get(0)?, r.get(0)?,
+                r.get(0)?, r.get(0)?, r.get(0)?, r.get(0)?, r.get(0)?, r.get(0)?, r.get(0)?, r.get(0)?,
+                r.get(0)?, r.get(0)?)),
+        )
+        .optional()?;
+
+        let Some((
+            id, user_id, name, guild_id, prompt_prefix, prompt_suffix, negative_prompt, width, height,
+            cfg_scale, steps, tiling, restore_faces, sampler, model_hash, denoising_strength, init_image,
+            resize_mode, init_url
+        ))= optional else { return Ok(None); };
+
+        let sampler = sampler.and_then(|s| sd::Sampler::try_from(s.as_str()).ok());
+        Ok(Some(Preset {
+            id: Some(id),
+            user_id: UserId(user_id.parse()?),
+            name,
+            guild_id: GuildId(guild_id.parse()?),
+            prompt_prefix,
+            prompt_suffix,
+            negative_prompt,
+            width,
+            height,
+            cfg_scale,
+            steps,
+            tiling,
+            restore_faces,
+            sampler,
+            model_hash,
+            denoising_strength,
+            image_generation: store_to_image_generation(init_image, resize_mode, init_url)?,
+        }))
     }
 
     pub fn get_model_usage_counts(
@@ -435,6 +569,29 @@ impl Interrogation {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Preset {
+    pub id: Option<i64>,
+    pub user_id: UserId,
+    pub name: String,
+    pub guild_id: GuildId,
+
+    pub prompt_prefix: Option<String>,
+    pub prompt_suffix: Option<String>,
+    pub negative_prompt: Option<String>,
+    pub width: Option<i64>,
+    pub height: Option<i64>,
+    pub cfg_scale: Option<f32>,
+    pub steps: Option<i64>,
+    pub tiling: Option<i64>,
+    pub restore_faces: Option<i64>,
+    pub sampler: Option<sd::Sampler>,
+    pub model_hash: Option<String>,
+    pub denoising_strength: Option<f32>,
+
+    pub image_generation: Option<ImageGeneration>,
+}
+
 impl Store {
     fn get_generation_with_predicate(
         &self,
@@ -553,19 +710,27 @@ impl Store {
             user_id: UserId(user_id.parse()?),
             guild_id: GuildId(guild_id.parse()?),
             denoising_strength,
-            image_generation: init_image
-                .zip(resize_mode)
-                .zip(init_url)
-                .map(|((init_image, resize_mode), init_url)| {
-                    anyhow::Ok(ImageGeneration {
-                        init_image: image::load_from_memory(&init_image)?,
-                        init_url,
-                        resize_mode: sd::ResizeMode::try_from(resize_mode.as_str())
-                            .ok()
-                            .context("invalid resize mode")?,
-                    })
-                })
-                .transpose()?,
+            image_generation: store_to_image_generation(init_image, resize_mode, init_url)?,
         }))
     }
+}
+
+fn store_to_image_generation(
+    init_image: Option<Vec<u8>>,
+    resize_mode: Option<String>,
+    init_url: Option<String>,
+) -> anyhow::Result<Option<ImageGeneration>> {
+    init_image
+        .zip(resize_mode)
+        .zip(init_url)
+        .map(|((init_image, resize_mode), init_url)| {
+            anyhow::Ok(ImageGeneration {
+                init_image: image::load_from_memory(&init_image)?,
+                init_url,
+                resize_mode: sd::ResizeMode::try_from(resize_mode.as_str())
+                    .ok()
+                    .context("invalid resize mode")?,
+            })
+        })
+        .transpose()
 }

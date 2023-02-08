@@ -183,7 +183,32 @@ pub async fn register(http: &Http, models: &[sd::Model]) -> anyhow::Result<()> {
 
     Command::create_global_application_command(http, |command| {
         command
-            .name(&Configuration::get().commands.png_info)
+            .name(&Configuration::get().commands.presets)
+            .description("Set, view and manage preset options")
+            .create_option(|o| {
+                o.kind(CommandOptionType::SubCommand)
+                    .name("view")
+                    .description("View presets");
+                o
+            })
+            .create_option(|o| {
+                o.kind(CommandOptionType::SubCommand)
+                    .name("set")
+                    .description("Set a preset");
+                o
+            })
+            .create_option(|o| {
+                o.kind(CommandOptionType::SubCommand)
+                    .name("delete")
+                    .description("Delete a preset");
+                o
+            })
+    })
+    .await?;
+
+    Command::create_global_application_command(http, |command| {
+        command
+            .name(&Configuration::get().commands.presets)
             .description("Retrieves the embedded PNG info of an image")
             .create_option(|option| {
                 option
