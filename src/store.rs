@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 pub struct Store(Mutex<rusqlite::Connection>);
 impl Store {
-    const FILENAME: &str = "store.sqlite";
+    const FILENAME: &'static str = "store.sqlite";
 
     pub fn load() -> anyhow::Result<Self> {
         let connection = rusqlite::Connection::open(Self::FILENAME)?;

@@ -43,7 +43,7 @@ impl AsPhenotype for TextGenome {
         prefix
             .into_iter()
             .chain(self.iter().map(|i| tags[*i as usize].as_str()))
-            .chain(suffix.into_iter())
+            .chain(suffix)
             .collect::<Vec<_>>()
             .join(", ")
     }

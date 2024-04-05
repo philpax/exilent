@@ -173,7 +173,7 @@ pub struct Configuration {
     runtime: ConfigurationRuntime,
 }
 impl Configuration {
-    const FILENAME: &str = "config.toml";
+    const FILENAME: &'static str = "config.toml";
 
     pub fn init() -> anyhow::Result<()> {
         CONFIGURATION
@@ -249,7 +249,7 @@ struct ConfigurationRuntime {
 fn read_tags_from_file(path: &Path) -> anyhow::Result<Tags> {
     Ok(std::io::BufReader::new(std::fs::File::open(path)?)
         .lines()
-        .filter_map(|l| l.ok())
+        .map_while(Result::ok)
         .filter(|l| !l.starts_with("//"))
         .collect())
 }

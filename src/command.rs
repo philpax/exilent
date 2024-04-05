@@ -369,7 +369,7 @@ impl GenerationParameters {
     pub fn image_generation(&self) -> Option<store::ImageGeneration> {
         match self {
             GenerationParameters::Image(image, url) => Some(store::ImageGeneration {
-                init_image: image.images.get(0)?.clone(),
+                init_image: image.images.first()?.clone(),
                 init_url: url.clone(),
                 resize_mode: image.resize_mode?,
             }),

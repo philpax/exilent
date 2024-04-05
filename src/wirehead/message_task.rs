@@ -82,7 +82,7 @@ pub async fn task(parameters: Parameters) -> anyhow::Result<()> {
                     ))
                     .components(|c| {
                         if to_exilent_enabled {
-                            match images.get(0).and_then(|i| i.1) {
+                            match images.first().and_then(|i| i.1) {
                                 Some(seed) => c.create_action_row(|row| {
                                     row.create_button(|b| {
                                         b.custom_id(
@@ -114,7 +114,7 @@ pub async fn task(parameters: Parameters) -> anyhow::Result<()> {
 
             channel_id
                 .send_files(http.as_ref(), images.iter().map(to_attachment_type), |m| {
-                    if let Some(seed) = images.get(0).and_then(|i| i.1) {
+                    if let Some(seed) = images.first().and_then(|i| i.1) {
                         m.components(|mc| {
                             mc.create_action_row(|row| {
                                 let g = &genome;

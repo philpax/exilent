@@ -15,7 +15,7 @@ macro_rules! implement_custom_id_component {
             $($member,)*
         }
         impl $name {
-            $(const $const: &str = $segment;)*
+            $(const $const: &'static str = $segment;)*
         }
         impl TryFrom<&str> for $name {
             type Error = anyhow::Error;
@@ -220,6 +220,5 @@ fn genome_to_hex(genome: TextGenome) -> String {
 
 fn hex_to_genome(hex: &str) -> TextGenome {
     bytemuck::cast_slice::<u8, u16>(&hex::decode(hex).unwrap())
-        .try_into()
-        .unwrap()
+        .into()
 }
