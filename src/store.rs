@@ -162,9 +162,8 @@ impl Store {
 
     pub fn get_interrogation(&self, key: i64) -> anyhow::Result<Option<Interrogation>> {
         let db = &mut *self.0.lock();
-        let Some((
-            user_id, generation_id, guild_id, url, result, interrogator
-        )) = db.query_row(
+        let Some((user_id, generation_id, guild_id, url, result, interrogator)) = db
+            .query_row(
                 r"
                 SELECT
                     user_id, generation_id, guild_id, url, result, interrogator
@@ -178,7 +177,10 @@ impl Store {
                 [key],
                 |r| r.try_into(),
             )
-            .optional()? else { return Ok(None); };
+            .optional()?
+        else {
+            return Ok(None);
+        };
 
         Ok(Some(Interrogation::from_db(
             user_id,
@@ -526,11 +528,14 @@ impl Store {
                         init_url,
                         image_url,
                         id,
-                        guild_id
+                        guild_id,
                     ))
                 },
             )
-            .optional()? else { return Ok(None); };
+            .optional()?
+        else {
+            return Ok(None);
+        };
 
         Ok(Some(Generation {
             id: Some(id),

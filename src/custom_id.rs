@@ -219,6 +219,5 @@ fn genome_to_hex(genome: TextGenome) -> String {
 }
 
 fn hex_to_genome(hex: &str) -> TextGenome {
-    bytemuck::cast_slice::<u8, u16>(&hex::decode(hex).unwrap())
-        .into()
+    bytemuck::cast_slice::<u8, u16>(&hex::decode(hex).unwrap()).into()
 }
