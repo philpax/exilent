@@ -88,7 +88,7 @@ async fn main() -> anyhow::Result<()> {
             .collect()
     };
     models.sort_by(|a, b| a.name.cmp(&b.name));
-    let store = Store::load()?;
+    let store = Store::load().context("failed to initialise database")?;
 
     // Build our client.
     let mut client = Client::builder(
